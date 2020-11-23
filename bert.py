@@ -47,25 +47,17 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
     return tag_arr_dict
 
 
-def svm_input_train(user_list, tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
+def svm_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
     f = open('./data/trainSvm.dat', "a")
     for user_num, user in enumerate(user_list):
-        fake_dict1 = user_arr_dict[user]
-        for index, value in enumerate(fake_dict1):
-            fake_dict1[index] = np.random.rand(1, 1).item()
-        user_arr = fake_dict1
+        user_arr = user_arr_dict[user]
         #print(user_arr)
         f.write(f"\n# query {user_num+1}")
-        for tag in tag_list:
-            fake_dict2 = tag_arr_dict[tag]
-            #print(fake_dict2)
-            for index, value in enumerate(fake_dict2):
-                #print(index)
-                fake_dict2[index] = random.random()
-            tag_arr = fake_dict2
+        for tag in train_tag_list:
+            tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             if tag in qid_train_dict[user]:
-                x = qid_train_dict[user][tag] #np.random.randint(len(tag_list), size=1).item()
+                x = qid_train_dict[user][tag]
             else:
                 x = 0
             f.write(f"\n{x} {'qid'}:{user_num+1}")
@@ -73,33 +65,29 @@ def svm_input_train(user_list, tag_list, user_arr_dict, tag_arr_dict, qid_train_
                 f.write(f" {index+1}:{value}")
 
 
-def svm_input_test(user_list, tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
+def svm_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
     f = open('./data/testSvm.dat', "a")
     for user_num, user in enumerate(user_list):
-        fake_dict1 = user_arr_dict[user]
-        for index, value in enumerate(fake_dict1):
-            fake_dict1[index] = np.random.rand(1, 1).item()
-        user_arr = fake_dict1
-        #print(user_arr)
-        for tag in tag_list:
-            fake_dict2 = tag_arr_dict[tag]
-            #print(fake_dict2)
-            for index, value in enumerate(fake_dict2):
-                #print(index)
-                fake_dict2[index] = random.random()
-            tag_arr = fake_dict2
+        user_arr = user_arr_dict[user]
+        # print(user_arr)
+        for tag_num, tag in enumerate(test_tag_list):
+            print('user_num: '+str(user_num)+'  tag_num: '+str(tag_num))
+            tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             if tag in qid_test_dict[user]:
-                x = qid_test_dict[user][tag] #np.random.randint(len(tag_list), size=1).item()
+                x = qid_test_dict[user][tag]
             else:
                 x = 0
-            f.write(f"\n{x} {'qid'}:{user_num+1}")
+            # f.write(f"\n{x} {'qid'}:{user_num+1}")
+            Str = f"\n{x} {'qid'}:{user_num+1}"
             for index, value in enumerate(user_tag_arr):
-                f.write(f" {index+1}:{value}")
+                Str += f" {index+1}:{value}"
+        f.write(Str)
 
 
 def sort_train_user_tag(user_list, train_df):
     train_df['hashtag'] = train_df['hashtag'].apply(get_hashtag)
+    train_tag_list = list(set(train_df['hashtag'].explode('hashtag').tolist()))
     qid_user_tag_dict = {}
     for user in user_list:
         spe_user_dict = {}
@@ -112,11 +100,12 @@ def sort_train_user_tag(user_list, train_df):
         qid_user_tag_dict[user] = spe_user_dict
 
     print(qid_user_tag_dict)
-    return qid_user_tag_dict
+    return train_tag_list, qid_user_tag_dict
 
 
 def sort_test_user_tag(user_list, test_df):
     test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
+    test_tag_list = list(set(test_df['hashtag'].explode('hashtag').tolist()))
     qid_user_tag_dict = {}
     for user in user_list:
         spe_user_dict = {}
@@ -129,12 +118,12 @@ def sort_test_user_tag(user_list, test_df):
         qid_user_tag_dict[user] = spe_user_dict
 
     print(qid_user_tag_dict)
-    return qid_user_tag_dict
+    return test_tag_list, qid_user_tag_dict
 
 
 def read_embedding(embedSet):
     content_df = pd.read_table(embedSet)
-    content_df = content_df[:10]
+    #content_df = content_df[:10]
     content_df['hashtag'] = content_df['hashtag'].apply(get_hashtag)
     #print(content_df)
     user_list = list(set(content_df['user_id'].tolist()))
@@ -156,8 +145,8 @@ if __name__ == '__main__':
 
     train_df = pd.read_table('./data/trainSet.csv')
     test_df = pd.read_table('./data/testSet.csv')
-    qid_train_dict = sort_train_user_tag(emb_para_list[0], train_df)
-    qid_test_dict = sort_test_user_tag(emb_para_list[0], test_df)
+    train_tag_df, qid_train_dict = sort_train_user_tag(emb_para_list[0], train_df)
+    test_tag_df, qid_test_dict = sort_test_user_tag(emb_para_list[0], test_df)
 
-    svm_input_train(emb_para_list[0], emb_para_list[2], user_arr_dict, tag_arr_dict, qid_train_dict)
-    svm_input_test(emb_para_list[0], emb_para_list[2], user_arr_dict, tag_arr_dict, qid_test_dict)
+    #svm_input_train(emb_para_list[0], train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
+    svm_input_test(emb_para_list[0], test_tag_df, user_arr_dict, tag_arr_dict, qid_test_dict)
