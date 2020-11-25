@@ -21,7 +21,7 @@ def average_user_tweet(user_list, content_user_df, con_emb_dict):
     user_arr_dict = {}
     for user in user_list:
         embed_list = []
-        content_list = content_user_df['content'].loc[content_user_df['user_id'] == user].tolist()#[0]
+        content_list = content_user_df['content'].loc[content_user_df['user_id'] == user].tolist()[0]
 
         for content in content_list:
             embed_list.append(content_embedding(content, con_emb_dict))
@@ -36,7 +36,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
     tag_arr_dict = {}
     for tag in tag_list:
         embed_list = []
-        content_list = content_tag_df['content'].loc[content_tag_df['hashtag'] == tag].tolist()#[0]
+        content_list = content_tag_df['content'].loc[content_tag_df['hashtag'] == tag].tolist()[0]
 
         for content in content_list:
             embed_list.append(content_embedding(content, con_emb_dict))
