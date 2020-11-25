@@ -11,24 +11,24 @@ def get_hashtag(content):
 
 
 def content_embedding(content, con_emb_dict):
-    try:
+    #try:
         return con_emb_dict[content]
-    except:
-        return [0]*768
+    #except:
+        #return [0]*768
 
 
 def average_user_tweet(user_list, content_user_df, con_emb_dict):
     user_arr_dict = {}
     for user in user_list:
         embed_list = []
-        content_list = content_user_df['content'].loc[content_user_df['user_id'] == user].tolist()[0]
+        content_list = content_user_df['content'].loc[(content_user_df['user_id']) == user].tolist()[0]
 
         for content in content_list:
             embed_list.append(content_embedding(content, con_emb_dict))
         embed_list = np.mean(np.array(embed_list), axis=0)
         user_arr_dict[user] = embed_list
 
-    #print(user_arr_dict)
+    print(user_arr_dict)
     return user_arr_dict
 
 
@@ -36,18 +36,18 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
     tag_arr_dict = {}
     for tag in tag_list:
         embed_list = []
-        content_list = content_tag_df['content'].loc[content_tag_df['hashtag'] == tag].tolist()[0]
+        content_list = content_tag_df['content'].loc[(content_tag_df['hashtag']) == tag].tolist()[0]
 
         for content in content_list:
             embed_list.append(content_embedding(content, con_emb_dict))
         embed_list = np.mean(np.array(embed_list), axis=0)
         tag_arr_dict[tag] = embed_list
 
-    #print(tag_arr_dict)
+    print(tag_arr_dict)
     return tag_arr_dict
 
 
-def svm_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
+def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
     f = open('./data/trainSvm.dat', "a")
     for user_num, user in enumerate(user_list):
         user_arr = user_arr_dict[user]
@@ -65,7 +65,7 @@ def svm_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_
                 f.write(f" {index+1}:{value}")
 
 
-def svm_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
+def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
     f = open('./data/testSvm.dat', "a")
     for user_num, user in enumerate(user_list):
         user_arr = user_arr_dict[user]
@@ -123,30 +123,32 @@ def sort_test_user_tag(user_list, test_df):
 
 def read_embedding(embedSet):
     content_df = pd.read_table(embedSet)
-    #content_df = content_df[:10]
+    content_df = content_df[:5000]
     content_df['hashtag'] = content_df['hashtag'].apply(get_hashtag)
     #print(content_df)
     user_list = list(set(content_df['user_id'].tolist()))
     content_user_df = content_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
-    tag_list = list(set(content_df.explode('hashtag')['hashtag'].tolist()))
     content_tag_df = content_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
+    tag_list = list(set(content_tag_df['hashtag'].tolist()))
     emb_para_list = [user_list, content_user_df, tag_list, content_tag_df]
     return emb_para_list
 
 
 if __name__ == '__main__':
-    with open('./data/embeddings.json', 'r') as f:
+    with open('./embeddings.json', 'r') as f:
         con_emb_dict = json.load(f)
     emb_para_list = read_embedding('./data/embedSet.csv')
+
     emb_para_list.append(con_emb_dict)
 
     user_arr_dict = average_user_tweet(emb_para_list[0], emb_para_list[1], emb_para_list[4])
     tag_arr_dict = average_hashtag_tweet(emb_para_list[2], emb_para_list[3], emb_para_list[4])
-
+'''
     train_df = pd.read_table('./data/trainSet.csv')
     test_df = pd.read_table('./data/testSet.csv')
     train_tag_df, qid_train_dict = sort_train_user_tag(emb_para_list[0], train_df)
     test_tag_df, qid_test_dict = sort_test_user_tag(emb_para_list[0], test_df)
 
-    #svm_input_train(emb_para_list[0], train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
-    svm_input_test(emb_para_list[0], test_tag_df, user_arr_dict, tag_arr_dict, qid_test_dict)
+    rank_input_train(emb_para_list[0], train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
+    rank_input_test(emb_para_list[0], test_tag_df, user_arr_dict, tag_arr_dict, qid_test_dict)
+'''
