@@ -2,6 +2,7 @@ import torch
 from transformers import AutoModel, AutoTokenizer
 import pandas as pd
 import json
+import numpy as np
 
 
 def cal_bert(embed_df):
@@ -15,6 +16,8 @@ def cal_bert(embed_df):
     for index, line in enumerate(lines):
         print(str(index)+'  '+line)
         input_ids = torch.tensor([tokenizer.encode(line)])
+        if len(input_ids[0].numpy().tolist()) > 128:
+            input_ids = torch.from_numpy(np.array(input_ids[0].numpy().tolist()[0:128])).reshape(1, -1).type(torch.LongTensor)
 
         with torch.no_grad():
             features = bertTweet(input_ids)  # Models outputs are now tuples
@@ -22,7 +25,7 @@ def cal_bert(embed_df):
 
     jsObj = json.dumps(con_emb_dict)
 
-    fileObj = open('embeddings.json', 'w')
+    fileObj = open('./data/embeddings.json', 'w')
     fileObj.write(jsObj)
     fileObj.close()
 
@@ -40,7 +43,7 @@ def test_dict(embed_df, con_emb_dict):
 
 if __name__ == '__main__':
     embed_df = pd.read_table('./data/embedSet.csv')
-    embed_df = embed_df[:5000]#[5433:5435]
+    #embed_df = embed_df[5434:5435]
     cal_bert(embed_df)
 
     #with open('./embeddings.json', 'r') as f:

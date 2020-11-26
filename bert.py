@@ -6,7 +6,7 @@ import random
 
 
 def get_hashtag(content):
-    hashtag = re.findall(r"['\'](.*?)['\']", content)
+    hashtag = re.findall(r"['\'](.*?)['\']", str(content))
     return hashtag
 
 
@@ -28,7 +28,7 @@ def average_user_tweet(user_list, content_user_df, con_emb_dict):
         embed_list = np.mean(np.array(embed_list), axis=0)
         user_arr_dict[user] = embed_list
 
-    print(user_arr_dict)
+    #print(user_arr_dict)
     return user_arr_dict
 
 
@@ -43,7 +43,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
         embed_list = np.mean(np.array(embed_list), axis=0)
         tag_arr_dict[tag] = embed_list
 
-    print(tag_arr_dict)
+    #print(tag_arr_dict)
     return tag_arr_dict
 
 
@@ -54,8 +54,10 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
         #print(user_arr)
         f.write(f"\n# query {user_num+1}")
         for tag in train_tag_list:
+            print(tag)
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+
             if tag in qid_train_dict[user]:
                 x = qid_train_dict[user][tag]
             else:
@@ -99,7 +101,7 @@ def sort_train_user_tag(user_list, train_df):
                 spe_user_dict[tag] = index + 1
         qid_user_tag_dict[user] = spe_user_dict
 
-    print(qid_user_tag_dict)
+    #print(qid_user_tag_dict)
     return train_tag_list, qid_user_tag_dict
 
 
@@ -117,13 +119,13 @@ def sort_test_user_tag(user_list, test_df):
                 spe_user_dict[tag] = index+1
         qid_user_tag_dict[user] = spe_user_dict
 
-    print(qid_user_tag_dict)
+    #print(qid_user_tag_dict)
     return test_tag_list, qid_user_tag_dict
 
 
 def read_embedding(embedSet):
     content_df = pd.read_table(embedSet)
-    content_df = content_df[:5000]
+    #content_df = content_df[:5000]
     content_df['hashtag'] = content_df['hashtag'].apply(get_hashtag)
     #print(content_df)
     user_list = list(set(content_df['user_id'].tolist()))
@@ -131,6 +133,18 @@ def read_embedding(embedSet):
     content_tag_df = content_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
     tag_list = list(set(content_tag_df['hashtag'].tolist()))
     emb_para_list = [user_list, content_user_df, tag_list, content_tag_df]
+    '''
+    train_df = pd.read_table('./data/trainSet.csv')
+    train_df['hashtag'] = train_df['hashtag'].apply(get_hashtag)
+    train_tag_list = list(set(train_df['hashtag'].explode('hashtag').tolist()))
+    print(train_tag_list)
+    print(tag_list)
+
+
+    for tag in train_tag_list:
+        if tag not in tag_list:
+            print(tag)
+    '''
     return emb_para_list
 
 
@@ -143,7 +157,7 @@ if __name__ == '__main__':
 
     user_arr_dict = average_user_tweet(emb_para_list[0], emb_para_list[1], emb_para_list[4])
     tag_arr_dict = average_hashtag_tweet(emb_para_list[2], emb_para_list[3], emb_para_list[4])
-'''
+
     train_df = pd.read_table('./data/trainSet.csv')
     test_df = pd.read_table('./data/testSet.csv')
     train_tag_df, qid_train_dict = sort_train_user_tag(emb_para_list[0], train_df)
@@ -151,4 +165,3 @@ if __name__ == '__main__':
 
     rank_input_train(emb_para_list[0], train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
     rank_input_test(emb_para_list[0], test_tag_df, user_arr_dict, tag_arr_dict, qid_test_dict)
-'''
