@@ -16,7 +16,7 @@ def computeTFIDF(documents):
     denselist = dense.tolist()
     df = pd.DataFrame(denselist, columns=feature_names)
     print(df)
-    df.to_csv('./data/tfidf.csv')
+    #df.to_csv('./data/tfidf.csv')
 
 
 if __name__ == '__main__':
