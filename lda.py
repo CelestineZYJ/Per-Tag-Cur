@@ -139,43 +139,65 @@ def sort_test_user_tag(user_list, test_df):
     print(qid_user_tag_dict)
     return test_tag_list, qid_user_tag_dict
 
-
+'''
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./data/trainSvm.dat', "a")
+    f = open('./ldaData/trainLda.dat', "a")
     for user_num, user in enumerate(user_list):
         user_arr = user_arr_dict[user]
-        #print(user_arr)
-        f.write(f"\n# query {user_num+1}")
-        for tag in train_tag_list:
+        Str = f"# query {user_num+1}"
+        for tag_num, tag in enumerate(train_tag_list):
+            print('train_user_num: ' + str(user_num) + '  tag_num: ' + str(tag_num))
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             if tag in qid_train_dict[user]:
                 x = qid_train_dict[user][tag]
             else:
                 x = 0
-            f.write(f"\n{x} {'qid'}:{user_num+1}")
+            Str += f"\n{x} {'qid'}:{user_num+1}"
             for index, value in enumerate(user_tag_arr):
-                f.write(f" {index+1}:{value}")
+                Str += f" {index + 1}:{value}"
+        f.write(Str+"\n")
+'''
+
+
+def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
+    f = open('./ldaData/trainLda2.dat', "a")
+    for user_num, user in enumerate(user_list):
+        user_arr = user_arr_dict[user]
+        f.write(f"# query {user_num + 1}")
+        for tag_num, tag in enumerate(train_tag_list):
+            print('train_user_num: ' + str(user_num) + '  tag_num: ' + str(tag_num))
+            tag_arr = tag_arr_dict[tag]
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+
+            if tag in qid_train_dict[user]:
+                x = qid_train_dict[user][tag]
+            else:
+                continue
+            Str = f"\n{x} {'qid'}:{user_num + 1}"
+            for index, value in enumerate(user_tag_arr):
+                Str += f" {index + 1}:{value}"
+            f.write(Str)
+        f.write("\n")
 
 
 def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
-    f = open('./data/testSvm.dat', "a")
+    f = open('./ldaData/testLda2.dat', "a")
     for user_num, user in enumerate(user_list):
         user_arr = user_arr_dict[user]
-        # print(user_arr)
         for tag_num, tag in enumerate(test_tag_list):
-            print('user_num: '+str(user_num)+'  tag_num: '+str(tag_num))
+            print('test_user_num: '+str(user_num)+'  tag_num: '+str(tag_num))
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             if tag in qid_test_dict[user]:
                 x = qid_test_dict[user][tag]
             else:
-                x = 0
+                continue
             # f.write(f"\n{x} {'qid'}:{user_num+1}")
-            Str = f"\n{x} {'qid'}:{user_num+1}"
+            Str = f"{x} {'qid'}:{user_num+1}"
             for index, value in enumerate(user_tag_arr):
                 Str += f" {index+1}:{value}"
-        f.write(Str)
+            f.write(Str+"\n")
 
 
 def read_para(content_df):
@@ -212,5 +234,5 @@ if __name__ == '__main__':
     train_tag_df, qid_train_dict = sort_train_user_tag(user_list, train_df)
     test_tag_df, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
-    rank_input_train(user_list, train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
+    #rank_input_train(user_list, train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
     rank_input_test(user_list, test_tag_df, user_arr_dict, tag_arr_dict, qid_test_dict)
