@@ -104,6 +104,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, lda_dict):
     return tag_arr_dict
 
 
+'''
 def sort_train_user_tag(user_list, train_df):
     train_df['hashtag'] = train_df['hashtag'].apply(get_hashtag)
     train_tag_list = list(set(train_df['hashtag'].explode('hashtag').tolist()))
@@ -120,6 +121,20 @@ def sort_train_user_tag(user_list, train_df):
 
     print(qid_user_tag_dict)
     return train_tag_list, qid_user_tag_dict
+'''
+
+
+def sort_train_user_tag(user_list, train_df):
+    train_df['hashtag'] = train_df['hashtag'].apply(get_hashtag)
+    train_tag_list = list(set(train_df['hashtag'].explode('hashtag').tolist()))
+    qid_user_tag_dict = {}
+    for user in user_list:
+        spe_user_df = train_df.loc[train_df['user_id'] == user]
+        spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
+        qid_user_tag_dict[user] = spe_user_tag_list
+
+    print(qid_user_tag_dict)
+    return train_tag_list, qid_user_tag_dict
 
 
 def sort_test_user_tag(user_list, test_df):
@@ -127,14 +142,9 @@ def sort_test_user_tag(user_list, test_df):
     test_tag_list = list(set(test_df['hashtag'].explode('hashtag').tolist()))
     qid_user_tag_dict = {}
     for user in user_list:
-        spe_user_dict = {}
-        spe_user_df = test_df.loc[test_df['user_id'] == user]
-        spe_user_df = spe_user_df.sort_values(by=['time'], ascending=True)
-        spe_user_tag_list = spe_user_df['hashtag'].tolist()
-        for index, value in enumerate(spe_user_tag_list):
-            for tag in value:
-                spe_user_dict[tag] = index+1
-        qid_user_tag_dict[user] = spe_user_dict
+        spe_user_df = train_df.loc[train_df['user_id'] == user]
+        spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
+        qid_user_tag_dict[user] = spe_user_tag_list
 
     print(qid_user_tag_dict)
     return test_tag_list, qid_user_tag_dict
@@ -161,7 +171,7 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
 
 
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./ldaData/trainLda2.dat', "a")
+    f = open('./ldaData/trainLda.dat', "a")
     for user_num, user in enumerate(user_list):
         user_arr = user_arr_dict[user]
         f.write(f"# query {user_num + 1}")
@@ -171,9 +181,10 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
 
             if tag in qid_train_dict[user]:
-                x = qid_train_dict[user][tag]
+                # x = qid_train_dict[user][tag]
+                x = 1
             else:
-                continue
+                x = -1
             Str = f"\n{x} {'qid'}:{user_num + 1}"
             for index, value in enumerate(user_tag_arr):
                 Str += f" {index + 1}:{value}"
@@ -182,7 +193,7 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
 
 
 def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
-    f = open('./ldaData/testLda2.dat', "a")
+    f = open('./ldaData/testLda.dat', "a")
     for user_num, user in enumerate(user_list):
         user_arr = user_arr_dict[user]
         for tag_num, tag in enumerate(test_tag_list):
@@ -190,9 +201,11 @@ def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_t
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             if tag in qid_test_dict[user]:
-                x = qid_test_dict[user][tag]
+                # x = qid_train_dict[user][tag]
+                print(1)
+                x = 1
             else:
-                continue
+                x = -1
             # f.write(f"\n{x} {'qid'}:{user_num+1}")
             Str = f"{x} {'qid'}:{user_num+1}"
             for index, value in enumerate(user_tag_arr):
@@ -234,5 +247,5 @@ if __name__ == '__main__':
     train_tag_df, qid_train_dict = sort_train_user_tag(user_list, train_df)
     test_tag_df, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
-    #rank_input_train(user_list, train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
+    rank_input_train(user_list, train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
     rank_input_test(user_list, test_tag_df, user_arr_dict, tag_arr_dict, qid_test_dict)
