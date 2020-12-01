@@ -5,6 +5,7 @@ from nltk.stem import WordNetLemmatizer, SnowballStemmer
 from nltk.stem.porter import *
 import numpy as np
 np.random.seed(2020)
+import random
 import nltk
 # nltk.download('wordnet')
 
@@ -49,7 +50,7 @@ def lda(content_df):
 
     dictionary.filter_extremes(no_below=15, no_above=0.5, keep_n=100000)
     bow_corpus = [dictionary.doc2bow(doc) for doc in documents]
-    lda_model = gensim.models.LdaMulticore(bow_corpus, num_topics=10, id2word=dictionary, passes=2, workers=2) # len(documents) == len(bow_corpus)
+    lda_model = gensim.models.LdaMulticore(bow_corpus, num_topics=50, id2word=dictionary, passes=2, workers=2) # len(documents) == len(bow_corpus)
 
     # for idx, topic in lda_model.print_topics(-1):
         # print('Topic: {} \nWords: {}'.format(idx, topic))
@@ -59,12 +60,12 @@ def lda(content_df):
         for index, score in sorted(lda_model[Value], key=lambda tup: -1 * tup[1]):
             #print("\nScore: {}\t \nTopic: {}".format(score, lda_model.print_topic(index, 10)))
             doc_list.append(score)
-        if len(doc_list) < 10:
-            for i in range(10-len(doc_list)):
+        if len(doc_list) < 50:
+            for i in range(50-len(doc_list)):
                 doc_list.append(float(0))
         lda_dict[sentences[Index]] = doc_list
 
-    #print(lda_dict)
+    print(lda_dict)
     return lda_dict
 
 
@@ -167,7 +168,6 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
             for index, value in enumerate(user_tag_arr):
                 Str += f" {index + 1}:{value}"
         f.write(Str+"\n")
-'''
 
 
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
@@ -190,27 +190,69 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
                 Str += f" {index + 1}:{value}"
             f.write(Str)
         f.write("\n")
+'''
 
 
-def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
+def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
+    f = open('./ldaData/trainLda.dat', "a")
+    for user_num, user in enumerate(user_list):
+        user_arr = user_arr_dict[user]
+        f.write(f"# query {user_num + 1}")
+        positive_tag_list = qid_train_dict[user]
+        for tag in positive_tag_list: # positive samples
+            tag_arr = tag_arr_dict[tag]
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+            x = 1
+            Str = f"\n{x} {'qid'}:{user_num + 1}"
+            for index, value in enumerate(user_tag_arr):
+                Str += f" {index + 1}:{value}"
+            f.write(Str)
+
+        temp_tag_list = list(set(train_tag_list)-set(positive_tag_list))
+        negative_tag_list = random.sample(temp_tag_list, 5*len(positive_tag_list))
+        for tag in negative_tag_list: # negative samples
+            tag_arr = tag_arr_dict[tag]
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+            x = -1
+            Str = f"\n{x} {'qid'}:{user_num + 1}"
+            for index, value in enumerate(user_tag_arr):
+                Str += f" {index + 1}:{value}"
+            f.write(Str)
+        f.write("\n")
+
+
+def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_dict):
+    test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
+    test_df = test_df.explode('hashtag').groupby(['hashtag'], as_index=False)['hashtag'].agg({'cnt': 'count'})
+    test_df = test_df.sort_values(by=['cnt'], ascending=False)
+    test_df = test_df[:1000]
+    top_tag_list = test_df['hashtag'].tolist()
+
     f = open('./ldaData/testLda.dat', "a")
     for user_num, user in enumerate(user_list):
         user_arr = user_arr_dict[user]
-        for tag_num, tag in enumerate(test_tag_list):
-            print('test_user_num: '+str(user_num)+'  tag_num: '+str(tag_num))
+        f.write(f"# query {user_num + 1}")
+        positive_tag_list = qid_train_dict[user]
+        for tag in positive_tag_list:  # positive samples
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-            if tag in qid_test_dict[user]:
-                # x = qid_train_dict[user][tag]
-                print(1)
-                x = 1
-            else:
-                x = -1
-            # f.write(f"\n{x} {'qid'}:{user_num+1}")
-            Str = f"{x} {'qid'}:{user_num+1}"
+            x = 1
+            Str = f"\n{x} {'qid'}:{user_num + 1}"
             for index, value in enumerate(user_tag_arr):
-                Str += f" {index+1}:{value}"
-            f.write(Str+"\n")
+                Str += f" {index + 1}:{value}"
+            f.write(Str)
+
+        temp_tag_list = list(set(top_tag_list) - set(positive_tag_list))
+        negative_tag_list = random.sample(temp_tag_list, 5 * len(positive_tag_list))
+        for tag in negative_tag_list:  # negative samples
+            tag_arr = tag_arr_dict[tag]
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+            x = -1
+            Str = f"\n{x} {'qid'}:{user_num + 1}"
+            for index, value in enumerate(user_tag_arr):
+                Str += f" {index + 1}:{value}"
+            f.write(Str)
+        f.write("\n")
 
 
 def read_para(content_df):
@@ -248,4 +290,4 @@ if __name__ == '__main__':
     test_tag_df, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
     rank_input_train(user_list, train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
-    rank_input_test(user_list, test_tag_df, user_arr_dict, tag_arr_dict, qid_test_dict)
+    rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_dict)
