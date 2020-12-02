@@ -93,6 +93,7 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
     f = open('./bertData/trainBert.dat', "a")
     for user_num, user in enumerate(user_list):
+        print('train_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
         f.write(f"# query {user_num + 1}")
         positive_tag_list = qid_train_dict[user]
@@ -110,7 +111,7 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
         for tag in negative_tag_list: # negative samples
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-            x = -1
+            x = 0
             Str = f"\n{x} {'qid'}:{user_num + 1}"
             for index, value in enumerate(user_tag_arr):
                 Str += f" {index + 1}:{value}"
@@ -125,11 +126,12 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
     test_df = test_df[:1000]
     top_tag_list = test_df['hashtag'].tolist()
 
-    f = open('./ldaData/testLda.dat', "a")
+    f = open('./bertData/testBert.dat', "a")
     for user_num, user in enumerate(user_list):
+        print('test_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
         f.write(f"# query {user_num + 1}")
-        positive_tag_list = qid_train_dict[user]
+        positive_tag_list = qid_test_dict[user]
         for tag in positive_tag_list:  # positive samples
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
@@ -139,12 +141,11 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
                 Str += f" {index + 1}:{value}"
             f.write(Str)
 
-        temp_tag_list = list(set(top_tag_list) - set(positive_tag_list))
-        negative_tag_list = random.sample(temp_tag_list, 5 * len(positive_tag_list))
+        negative_tag_list = list(set(top_tag_list) - set(positive_tag_list))
         for tag in negative_tag_list:  # negative samples
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-            x = -1
+            x = 0
             Str = f"\n{x} {'qid'}:{user_num + 1}"
             for index, value in enumerate(user_tag_arr):
                 Str += f" {index + 1}:{value}"
