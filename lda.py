@@ -7,7 +7,7 @@ import numpy as np
 np.random.seed(2020)
 import random
 import nltk
-# nltk.download('wordnet')
+nltk.download('wordnet')
 
 
 def get_hashtag(content):
