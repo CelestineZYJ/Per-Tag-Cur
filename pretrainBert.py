@@ -25,7 +25,7 @@ def cal_bert(embed_df):
 
     jsObj = json.dumps(con_emb_dict)
 
-    fileObj = open('./data/embeddings.json', 'w')
+    fileObj = open('./input/embeddings.json', 'w')
     fileObj.write(jsObj)
     fileObj.close()
 
@@ -42,7 +42,7 @@ def test_dict(embed_df, con_emb_dict):
 
 
 if __name__ == '__main__':
-    embed_df = pd.read_table('./data/embedSet.csv')
+    embed_df = pd.read_table('./input/embedSet.csv')
     #embed_df = embed_df[5434:5435]
     cal_bert(embed_df)
 
