@@ -47,51 +47,8 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
     return tag_arr_dict
 
 
-'''
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./bertData/trainBert.dat', "a")
-    for user_num, user in enumerate(user_list):
-        user_arr = user_arr_dict[user]
-        Str = f"# query {user_num+1}"
-        for tag_num, tag in enumerate(train_tag_list):
-            print('train_user_num: '+str(user_num)+'  tag_num: '+str(tag_num))
-            tag_arr = tag_arr_dict[tag]
-            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-
-            if tag in qid_train_dict[user]:
-                x = qid_train_dict[user][tag]
-            else:
-                x = 0
-            Str += f"\n{x} {'qid'}:{user_num+1}"
-            for index, value in enumerate(user_tag_arr):
-                Str += f" {index + 1}:{value}"
-        f.write(Str+"\n")
-
-
-def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./bertData/trainBert.dat', "a")
-    for user_num, user in enumerate(user_list):
-        user_arr = user_arr_dict[user]
-        f.write(f"# query {user_num+1}")
-        for tag_num, tag in enumerate(train_tag_list):
-            print('train_user_num: '+str(user_num)+'  tag_num: '+str(tag_num))
-            tag_arr = tag_arr_dict[tag]
-            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-
-            if tag in qid_train_dict[user]:
-                x = 1
-            else:
-                x = -1
-            Str = f"\n{x} {'qid'}:{user_num+1}"
-            for index, value in enumerate(user_tag_arr):
-                Str += f" {index + 1}:{value}"
-            f.write(Str)
-        f.write("\n")
-'''
-
-
-def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./bert/trainBert.dat', "a")
+    f = open('./weiBert/trainBert.dat', "a")
     for user_num, user in enumerate(user_list):
         print('train_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
@@ -126,7 +83,7 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
     test_df = test_df[:1000]
     top_tag_list = test_df['hashtag'].tolist()
 
-    f = open('./bert/testBert.dat', "a")
+    f = open('./weiBert/testBert.dat', "a")
     for user_num, user in enumerate(user_list):
         print('test_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
@@ -202,9 +159,10 @@ def sort_test_user_tag(user_list, test_df):
 def read_embedding(embedSet):
     content_df = pd.read_table(embedSet)
     content_df['hashtag'] = content_df['hashtag'].apply(get_hashtag)
+    user_list = list(set(content_df['user_id'].tolist()))
     #print(content_df)
-    with open("userList.txt", "r") as f:
-        user_list = get_hashtag(f.readlines()[0])
+    #with open("userList.txt", "r") as f:
+        #user_list = get_hashtag(f.readlines()[0])
     content_user_df = content_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
     content_tag_df = content_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
     tag_list = list(set(content_tag_df['hashtag'].tolist()))
@@ -225,17 +183,17 @@ def read_embedding(embedSet):
 
 
 if __name__ == '__main__':
-    with open('./input/embeddings.json', 'r') as f:
+    with open('./weiData/embeddings.json', 'r') as f:
         con_emb_dict = json.load(f)
-    emb_para_list = read_embedding('./input/embedSet.csv')
+    emb_para_list = read_embedding('./weiData/embedSet.csv')
 
     emb_para_list.append(con_emb_dict)
 
     user_arr_dict = average_user_tweet(emb_para_list[0], emb_para_list[1], emb_para_list[4])
     tag_arr_dict = average_hashtag_tweet(emb_para_list[2], emb_para_list[3], emb_para_list[4])
 
-    train_df = pd.read_table('./input/trainSet.csv')
-    test_df = pd.read_table('./input/testSet.csv')
+    train_df = pd.read_table('./weiData/trainSet.csv')
+    test_df = pd.read_table('./weiData/testSet.csv')
     train_tag_df, qid_train_dict = sort_train_user_tag(emb_para_list[0], train_df)
     test_tag_df, qid_test_dict = sort_test_user_tag(emb_para_list[0], test_df)
 
