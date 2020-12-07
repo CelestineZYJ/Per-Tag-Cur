@@ -8,8 +8,8 @@ import numpy as np
 def cal_bert(embed_df):
     lines = embed_df['content'].tolist()
 
-    bertTweet = BertModel.from_pretrained("hfl/chinese-bert-wwm")
-    tokenizer = BertTokenizer.from_pretrained("hfl/chinese-bert-wwm")
+    bertTweet = BertModel.from_pretrained("hfl/chinese-bert-wwm")  # “vinai/bertweet-base” 
+    tokenizer = BertTokenizer.from_pretrained("hfl/chinese-bert-wwm")  # “vinai/bertweet-base”
     # INPUT TWEET IS ALREADY NORMALIZED!
 
     con_emb_dict = {}
