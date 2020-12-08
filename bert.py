@@ -128,7 +128,7 @@ def sort_test_user_tag(user_list, test_df):
     test_tag_list = list(set(test_df['hashtag'].explode('hashtag').tolist()))
     qid_user_tag_dict = {}
     for user in user_list:
-        spe_user_df = train_df.loc[test_df['user_id'] == user]
+        spe_user_df = test_df.loc[test_df['user_id'] == user]
         spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
         qid_user_tag_dict[user] = spe_user_tag_list
 

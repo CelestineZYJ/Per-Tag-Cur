@@ -6,8 +6,8 @@ from nltk.stem.porter import *
 import numpy as np
 np.random.seed(2020)
 import random
-import nltk
-nltk.download('wordnet')
+#import nltk
+#nltk.download('wordnet')
 
 
 def get_hashtag(content):
@@ -36,7 +36,11 @@ def sin_preprocess(text):
 def whole_preproess(content_df):
     documents = readDocument(content_df)
     for i in range(len(documents)):
-        documents[i] = sin_preprocess(documents[i])
+        try:
+            documents[i] = sin_preprocess(str(documents[i]))
+        except:
+            print(str(i)+": "+str(documents[i]))
+            print(content_df[i-1:i]['content'])
         # print(documents[i])
     # print(documents[1])
     return documents
@@ -66,6 +70,7 @@ def lda(content_df):
         lda_dict[sentences[Index]] = doc_list
 
     print(lda_dict)
+    print("function: lda()")
     return lda_dict
 
 
@@ -85,6 +90,7 @@ def average_user_tweet(user_list, content_user_df, lda_dict):
         user_arr_dict[user] = embed_list
 
     print(user_arr_dict)
+    print("function: average_user_tweet()")
     return user_arr_dict
 
 
@@ -92,6 +98,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, lda_dict):
     tag_arr_dict = {}
 
     for index, tag in enumerate(tag_list):
+        print(index)
         embed_list = []
         content_list = content_tag_df['content'].loc[tag == content_tag_df['hashtag']].tolist()[0]
 
@@ -102,6 +109,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, lda_dict):
         tag_arr_dict[tag] = embed_list
 
     print(tag_arr_dict)
+    print("function: average_hashtag_tweet()")
     return tag_arr_dict
 
 
@@ -115,6 +123,7 @@ def sort_train_user_tag(user_list, train_df):
         qid_user_tag_dict[user] = spe_user_tag_list
 
     print(qid_user_tag_dict)
+    print("function: sort_train_user_tag()")
     return train_tag_list, qid_user_tag_dict
 
 
@@ -123,11 +132,12 @@ def sort_test_user_tag(user_list, test_df):
     test_tag_list = list(set(test_df['hashtag'].explode('hashtag').tolist()))
     qid_user_tag_dict = {}
     for user in user_list:
-        spe_user_df = train_df.loc[test_df['user_id'] == user]
+        spe_user_df = test_df.loc[test_df['user_id'] == user]
         spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
         qid_user_tag_dict[user] = spe_user_tag_list
 
     print(qid_user_tag_dict)
+    print("function: sort_test_user_tag()")
     return test_tag_list, qid_user_tag_dict
 
 
@@ -217,7 +227,8 @@ def read_para(content_df):
     '''
     content_tag_df = content_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
     tag_list = list(set(content_tag_df['hashtag'].tolist()))
-
+    print("user_num: "+str(len(user_list)))
+    print("tag_num: " + str(len(tag_list)))
     return user_list, content_user_df, tag_list, content_tag_df
 
 
