@@ -102,7 +102,7 @@ def sort_test_user_tag(user_list, test_df):
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
     f = open('./trecTf/trainTf.dat', "a")
     for user_num, user in enumerate(user_list):
-        print(user_num)
+        print('train_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
         f.write(f"# query {user_num + 1}")
         positive_tag_list = qid_train_dict[user]
@@ -137,7 +137,7 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
 
     f = open('./trecTf/testTf.dat', "a")
     for user_num, user in enumerate(user_list):
-        print(user_num)
+        print('test_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
         f.write(f"# query {user_num + 1}")
         positive_tag_list = qid_test_dict[user]
