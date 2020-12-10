@@ -1,5 +1,5 @@
 import torch
-from transformers import BertModel, BertTokenizer
+from transformers import BertModel, BertTokenizer # AutoModel AutoTokenizer
 import pandas as pd
 import json
 import numpy as np
@@ -8,7 +8,7 @@ import numpy as np
 def cal_bert(embed_df):
     lines = embed_df['content'].tolist()
 
-    bertTweet = BertModel.from_pretrained("hfl/chinese-bert-wwm")  # “vinai/bertweet-base” 
+    bertTweet = BertModel.from_pretrained("hfl/chinese-bert-wwm")  # “vinai/bertweet-base”
     tokenizer = BertTokenizer.from_pretrained("hfl/chinese-bert-wwm")  # “vinai/bertweet-base”
     # INPUT TWEET IS ALREADY NORMALIZED!
 
@@ -38,16 +38,16 @@ def test_dict(embed_df, con_emb_dict):
             print(con_emb_dict[content])
         except:
             print(content)
-            print('\n\n\n')
+            print('\n')
 
 
 if __name__ == '__main__':
     embed_df = pd.read_table('./weiData/embedSet.csv')
-    #embed_df = embed_df[5434:5435]
+    embed_df = embed_df[:200]
     cal_bert(embed_df)
-
-    #with open('./embeddings.json', 'r') as f:
-        #con_emb_dict = json.load(f)
-    #test_dict(embed_df, con_emb_dict)
-
+'''
+    with open('./weiData/embeddings.json', 'r') as f:
+        con_emb_dict = json.load(f)
+    test_dict(embed_df, con_emb_dict)
+'''
 
