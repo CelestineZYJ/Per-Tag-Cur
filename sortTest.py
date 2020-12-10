@@ -24,7 +24,7 @@ def sortTest(testDat, predict, sort):
             spe_user_list = []
             continue
         if i == len(tests)-1:
-            tests[i] = (tests[i], int(pres[j]))
+            tests[i] = (tests[i], float(pres[j]))
             spe_user_list.append(tests[i])
             spe_user_list.sort(key=getPre, reverse=True)
             print(spe_user_list)
@@ -34,12 +34,12 @@ def sortTest(testDat, predict, sort):
             f.write(str)
             j -= 1
             spe_user_list = []
-        tests[i] = (tests[i], int(pres[j]))
+        tests[i] = (tests[i], float(pres[j]))
         spe_user_list.append(tests[i])
 
 
 if __name__ == "__main__":
-    testDat = open("tLda/testLda.dat")
-    predict = open("tLda/preLdaSvm.txt")
-    sort = "tLda/sortLdaSvm.txt"
+    testDat = open("trecTf/testTf.dat")
+    predict = open("trecTf/preTfSvm.txt")
+    sort = "trecTf/sortTfSvm.txt"
     sortTest(testDat, predict, sort)

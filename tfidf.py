@@ -21,7 +21,7 @@ def readDocument(content_df):
 
 def computeTFIDF(documents):
     tf_dict = {}
-    vectorizer = TfidfVectorizer(min_df=100, max_df=10000)
+    vectorizer = TfidfVectorizer(min_df=500, max_df=10000)
     vectors = vectorizer.fit_transform(documents)
     feature_names = vectorizer.get_feature_names()
     dense = vectors.todense()
@@ -116,7 +116,7 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
             f.write(Str)
 
         temp_tag_list = list(set(train_tag_list)-set(positive_tag_list))
-        negative_tag_list = random.sample(temp_tag_list, 5*len(positive_tag_list))
+        negative_tag_list = random.sample(temp_tag_list, 10*len(positive_tag_list))
         for tag in negative_tag_list: # negative samples
             tag_arr = tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
@@ -132,7 +132,7 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
     test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
     test_df = test_df.explode('hashtag').groupby(['hashtag'], as_index=False)['hashtag'].agg({'cnt': 'count'})
     test_df = test_df.sort_values(by=['cnt'], ascending=False)
-    # test_df = test_df[:1000]
+    test_df = test_df[:600]
     top_tag_list = test_df['hashtag'].tolist()
 
     f = open('./trecTf/testTf.dat', "a")

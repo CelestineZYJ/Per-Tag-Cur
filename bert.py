@@ -48,7 +48,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
 
 
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./weiBert/trainBert.dat', "a")
+    f = open('./trecBert/trainBert.dat', "a")
     for user_num, user in enumerate(user_list):
         print('train_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
@@ -80,10 +80,10 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
     test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
     test_df = test_df.explode('hashtag').groupby(['hashtag'], as_index=False)['hashtag'].agg({'cnt': 'count'})
     test_df = test_df.sort_values(by=['cnt'], ascending=False)
-    test_df = test_df[:1000]
+    # test_df = test_df[:1000]
     top_tag_list = test_df['hashtag'].tolist()
 
-    f = open('./weiBert/testBert.dat', "a")
+    f = open('./trecBert/testBert.dat', "a")
     for user_num, user in enumerate(user_list):
         print('test_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
@@ -159,10 +159,10 @@ def sort_test_user_tag(user_list, test_df):
 def read_embedding(embedSet):
     content_df = pd.read_table(embedSet)
     content_df['hashtag'] = content_df['hashtag'].apply(get_hashtag)
-    user_list = list(set(content_df['user_id'].tolist()))
+    #user_list = list(set(content_df['user_id'].tolist()))
     #print(content_df)
-    #with open("userList.txt", "r") as f:
-        #user_list = get_hashtag(f.readlines()[0])
+    with open("userList.txt", "r") as f:
+        user_list = get_hashtag(f.readlines()[0])
     content_user_df = content_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
     content_tag_df = content_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
     tag_list = list(set(content_tag_df['hashtag'].tolist()))
@@ -183,17 +183,17 @@ def read_embedding(embedSet):
 
 
 if __name__ == '__main__':
-    with open('./weiData/embeddings.json', 'r') as f:
+    with open('./trecData/embeddings.json', 'r') as f:
         con_emb_dict = json.load(f)
-    emb_para_list = read_embedding('./weiData/embedSet.csv')
+    emb_para_list = read_embedding('./trecData/embedSet.csv')
 
     emb_para_list.append(con_emb_dict)
 
     user_arr_dict = average_user_tweet(emb_para_list[0], emb_para_list[1], emb_para_list[4])
     tag_arr_dict = average_hashtag_tweet(emb_para_list[2], emb_para_list[3], emb_para_list[4])
 
-    train_df = pd.read_table('./weiData/trainSet.csv')
-    test_df = pd.read_table('./weiData/testSet.csv')
+    train_df = pd.read_table('./tData/trainSet.csv')
+    test_df = pd.read_table('./tData/testSet.csv')
     train_tag_df, qid_train_dict = sort_train_user_tag(emb_para_list[0], train_df)
     test_tag_df, qid_test_dict = sort_test_user_tag(emb_para_list[0], test_df)
 
