@@ -1,11 +1,18 @@
 import torch
-from transformers import BertModel, BertTokenizer # AutoModel AutoTokenizer
+from transformers import BertModel, BertTokenizer #AutoModel, AutoTokenizer
 import pandas as pd
 import json
 import numpy as np
 
 
+def get_str(content):
+    Str = str(content)
+    return Str
+
+
 def cal_bert(embed_df):
+    embed_df['user_id'] = embed_df['user_id'].apply(get_str)
+    embed_df['content'] = embed_df['content'].apply(get_str)
     lines = embed_df['content'].tolist()
 
     bertTweet = BertModel.from_pretrained("hfl/chinese-bert-wwm")  # “vinai/bertweet-base”
@@ -25,7 +32,7 @@ def cal_bert(embed_df):
 
     jsObj = json.dumps(con_emb_dict)
 
-    fileObj = open('./weiData/embeddings.json', 'w')
+    fileObj = open('./wData/embeddings.json', 'w')
     fileObj.write(jsObj)
     fileObj.close()
 
@@ -42,8 +49,8 @@ def test_dict(embed_df, con_emb_dict):
 
 
 if __name__ == '__main__':
-    embed_df = pd.read_table('./weiData/embedSet.csv')
-    embed_df = embed_df[:200]
+    embed_df = pd.read_table('./wData/embed.csv')
+    #embed_df = embed_df[:200]
     cal_bert(embed_df)
 '''
     with open('./weiData/embeddings.json', 'r') as f:
