@@ -1,3 +1,4 @@
+#  -*- coding: utf-8 -*-
 import numpy as np
 import pandas as pd
 import re
@@ -32,28 +33,24 @@ def average_user_tweet(user_list, content_user_df, con_emb_dict):
     for user in user_list:
         embed_list = []
         x = content_user_df['content'].loc[(content_user_df['user_id']) == user].tolist()
-        print(x)
+        #print(x)
         content_list = x[0]
-        try:
-            x = content_user_df['content'].loc[(content_user_df['user_id']) == user].tolist()
-            content_list = x[0]
-        except:
-            print(type(x))
-            print(x)
-            continue
 
         for content in content_list:
             embed_list.append(content_embedding(content, con_emb_dict))
         embed_list = np.mean(np.array(embed_list), axis=0)
         user_arr_dict[user] = embed_list
 
-    #print(user_arr_dict)
+    print(user_arr_dict)
+    print("function: average_user_tweet()")
     return user_arr_dict
 
 
 def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
     tag_arr_dict = {}
-    for tag in tag_list:
+    print(len(tag_list))
+    for index, tag in enumerate(tag_list):
+        print(str(index)+tag)
         embed_list = []
         content_list = content_tag_df['content'].loc[(content_tag_df['hashtag']) == tag].tolist()[0]
 
@@ -61,8 +58,10 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
             embed_list.append(content_embedding(content, con_emb_dict))
         embed_list = np.mean(np.array(embed_list), axis=0)
         tag_arr_dict[tag] = embed_list
+        #print(tag_arr_dict[tag])
 
     #print(tag_arr_dict)
+    print("function: average_hashtag_tweet()")
     return tag_arr_dict
 
 
@@ -96,51 +95,74 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
 
 
 def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
-    '''
-    test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
-    test_df = test_df.explode('hashtag').groupby(['hashtag'], as_index=False)['hashtag'].agg({'cnt': 'count'})
-    test_df = test_df.sort_values(by=['cnt'], ascending=False)
-    # test_df = test_df[:1000]
-    top_tag_list = test_df['hashtag'].tolist()
-    '''
     f = open('./wBert/testBert.dat', "a")
-    tagF = open('./wBert/tagList.txt', "a")
+    tagF = open('./wBert/tagList.txt', "a", encoding="utf-8")
 
     for user_num, user in enumerate(user_list):
         print('test_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
         f.write(f"# query {user_num + 1}")
         tagF.write(f"# query {user_num + 1}\n")
-        tagStr = ""
         positive_tag_list = qid_test_dict[user]
         for tag in positive_tag_list:  # positive samples
+            tag_arr = tag_arr_dict[tag]
+            '''
+            print("user_arr: "+str(type(user_arr)))
+            print("tag_arr: "+str(type(tag_arr)))
+            print(user_arr)
+            print(tag_arr)
+            '''
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+            x = 1
+            Str = f"\n{x} {'qid'}:{user_num + 1}"
+            tagF.write(f"{tag}\n")
+            for index, value in enumerate(user_tag_arr):
+                Str += f" {index + 1}:{value}"
+            f.write(Str)
+            '''
             try:
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 x = 1
                 Str = f"\n{x} {'qid'}:{user_num + 1}"
-                tagStr += f"{tag}\n"
+                tagF.write(f"{tag}\n")
                 for index, value in enumerate(user_tag_arr):
                     Str += f" {index + 1}:{value}"
                 f.write(Str)
             except:
                 print(tag)
-
+            '''
         negative_tag_list = list(set(test_tag_list) - set(positive_tag_list))
         for tag in negative_tag_list:  # negative samples
+            tag_arr = tag_arr_dict[tag]
+            '''
+            print("user_arr: "+str(type(user_arr)))
+            print("tag_arr: "+str(type(tag_arr)))
+            print(user_arr)
+            print(tag_arr)
+            '''
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+            x = 0
+            Str = f"\n{x} {'qid'}:{user_num + 1}"
+            tagF.write(f"{tag}\n")
+            for index, value in enumerate(user_tag_arr):
+                Str += f" {index + 1}:{value}"
+            f.write(Str)
+        f.write("\n")
+        '''
             try:
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 x = 0
                 Str = f"\n{x} {'qid'}:{user_num + 1}"
-                tagStr += f"{tag}\n"
+                tagF.write(f"{tag}\n")
                 for index, value in enumerate(user_tag_arr):
                     Str += f" {index + 1}:{value}"
                 f.write(Str)
             except:
                 print(tag)
         f.write("\n")
-        tagF.write(tagStr)
+        '''
 
 
 def sort_train_user_tag(user_list, train_df):
@@ -169,14 +191,7 @@ def sort_test_user_tag(user_list, test_df):
     return test_tag_list, qid_user_tag_dict
 
 
-def read_embedding(embedSet, test_df):
-    content_df = pd.read_table(embedSet)
-
-    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
-    #content_df['user_id'] = content_df['user_id'].apply(get_str)
-    content_df['content'] = content_df['content'].apply(get_str)
-    content_df['hashtag'] = content_df['hashtag'].apply(get_hashtag)
-
+def read_embedding(content_df, test_df):
     # 写userList
     '''
     user_list = list(set(test_df['user_id'].tolist()))
@@ -226,7 +241,13 @@ if __name__ == '__main__':
 
     with open('./wData/embeddings.json', 'r') as f:
         con_emb_dict = json.load(f)
-    emb_para_list = read_embedding('./wData/embed.csv', test_df)
+
+    embedSet = pd.read_table('./wData/embed.csv')
+    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
+    embedSet['user_id'] = embedSet['user_id'].apply(get_str)
+    embedSet['content'] = embedSet['content'].apply(get_str)
+    embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
+    emb_para_list = read_embedding(embedSet, test_df)
 
     emb_para_list.append(con_emb_dict)
 
