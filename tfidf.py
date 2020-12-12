@@ -42,7 +42,7 @@ def computeTFIDF(documents):
     documents = content_df['content'].tolist()
     for index, doc in enumerate(documents):
         tf_dict[documents[index]] = df.loc[index].tolist()
-    print(tf_dict)
+    #print(tf_dict)
     return tf_dict
 
 
@@ -57,7 +57,7 @@ def average_user_tweet(user_list, content_user_df, tf_dict):
         embed_list = np.mean(np.array(embed_list), axis=0)
         user_arr_dict[user] = embed_list
 
-    print(user_arr_dict)
+    #print(user_arr_dict)
     print("function: average_user_tweet()")
     return user_arr_dict
 
@@ -66,7 +66,6 @@ def average_hashtag_tweet(tag_list, content_tag_df, tf_dict):
     tag_arr_dict = {}
 
     for index, tag in enumerate(tag_list):
-        print(index)
         embed_list = []
         content_list = content_tag_df['content'].loc[tag == content_tag_df['hashtag']].tolist()[0]
 
@@ -76,7 +75,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, tf_dict):
         embed_list = np.mean(np.array(embed_list), axis=0)
         tag_arr_dict[tag] = embed_list
 
-    print(tag_arr_dict)
+    #print(tag_arr_dict)
     print("function: average_hashtag_tweet()")
     return tag_arr_dict
 
@@ -90,7 +89,7 @@ def sort_train_user_tag(user_list, train_df):
         spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
         qid_user_tag_dict[user] = spe_user_tag_list
 
-    print(qid_user_tag_dict)
+    #print(qid_user_tag_dict)
     print("function: sort_train_user_tag()")
     return train_tag_list, qid_user_tag_dict
 
@@ -104,7 +103,7 @@ def sort_test_user_tag(user_list, test_df):
         spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
         qid_user_tag_dict[user] = spe_user_tag_list
 
-    print(qid_user_tag_dict)
+    #print(qid_user_tag_dict)
     print("function: sort_test_user_tag()")
     return test_tag_list, qid_user_tag_dict
 
@@ -178,15 +177,17 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
         f.write("\n")
 
 
-def read_para(content_df):
+def read_para(content_df, test_df):
     '''
-    user_list = list(set(content_df['user_id'].tolist()))
+    user_list = list(set(test_df['user_id'].tolist()))
     f = open("wData/userList.txt", "w")
     f.write(str(user_list))
     f.close()
     '''
-    with open("./wData/userList.txt", "r") as f:
-        user_list = get_hashtag(f.readlines()[0])
+    with open("wData/userList.txt", "r") as f:
+        x = f.readlines()[0]
+        print(x)
+        user_list = get_hashtag(x)
         print(user_list)
 
     content_user_df = content_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
@@ -212,13 +213,6 @@ if __name__ == '__main__':
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
     embedSet['user_id'] = embedSet['user_id'].apply(get_str)
     embedSet['content'] = embedSet['content'].apply(get_str)
-    tf_dict = computeTFIDF(readDocument(embedSet))
-
-    user_list, content_user_df, emb_tag_list, content_tag_df = read_para(embedSet)
-
-    user_arr_dict = average_user_tweet(user_list, content_user_df, tf_dict)
-    tag_arr_dict = average_hashtag_tweet(emb_tag_list, content_tag_df, tf_dict)
-
     train_df = pd.read_table('./wData/train.csv')
     test_df = pd.read_table('./wData/test.csv')
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
@@ -226,6 +220,13 @@ if __name__ == '__main__':
     test_df['user_id'] = test_df['user_id'].apply(get_str)
     train_df['content'] = train_df['content'].apply(get_str)
     test_df['content'] = test_df['content'].apply(get_str)
+    tf_dict = computeTFIDF(readDocument(embedSet))
+
+    user_list, content_user_df, emb_tag_list, content_tag_df = read_para(embedSet, test_df)
+
+    user_arr_dict = average_user_tweet(user_list, content_user_df, tf_dict)
+    tag_arr_dict = average_hashtag_tweet(emb_tag_list, content_tag_df, tf_dict)
+
     train_tag_df, qid_train_dict = sort_train_user_tag(user_list, train_df)
     test_tag_df, qid_test_dict = sort_test_user_tag(user_list, test_df)
 

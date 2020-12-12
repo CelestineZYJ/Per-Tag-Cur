@@ -10,14 +10,14 @@ def get_hashtag(content):
     return hashtag
 
 
-def get_str(content):
-    Str = str(content)
-    return Str
-
-
 def get_user(content):
     user = re.split(r"[\[\],]", str(content))
     return user[1:-1]
+
+
+def get_str(content):
+    Str = str(content)
+    return Str
 
 
 def content_embedding(content, con_emb_dict):
@@ -31,7 +31,16 @@ def average_user_tweet(user_list, content_user_df, con_emb_dict):
     user_arr_dict = {}
     for user in user_list:
         embed_list = []
-        content_list = content_user_df['content'].loc[(content_user_df['user_id']) == user].tolist()[0]
+        x = content_user_df['content'].loc[(content_user_df['user_id']) == user].tolist()
+        print(x)
+        content_list = x[0]
+        try:
+            x = content_user_df['content'].loc[(content_user_df['user_id']) == user].tolist()
+            content_list = x[0]
+        except:
+            print(type(x))
+            print(x)
+            continue
 
         for content in content_list:
             embed_list.append(content_embedding(content, con_emb_dict))
@@ -164,11 +173,12 @@ def read_embedding(embedSet, test_df):
     content_df = pd.read_table(embedSet)
 
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
-    embedSet['user_id'] = embedSet['user_id'].apply(get_str)
-    embedSet['content'] = embedSet['content'].apply(get_str)
+    #content_df['user_id'] = content_df['user_id'].apply(get_str)
+    content_df['content'] = content_df['content'].apply(get_str)
     content_df['hashtag'] = content_df['hashtag'].apply(get_hashtag)
 
     # 写userList
+    '''
     user_list = list(set(test_df['user_id'].tolist()))
     f = open("wData/userList.txt", "w")
     f.write(str(user_list))
@@ -177,8 +187,11 @@ def read_embedding(embedSet, test_df):
     # 读userlist，要灵活调换写与读以保持与其他实验的统一
     ''' 
     with open("wData/userList.txt", "r") as f:
-        user_list = get_hashtag(f.readlines()[0])
-    '''
+        x = f.readlines()[0]
+        print(x)
+        user_list = get_hashtag(x)
+        print(user_list)
+
     content_user_df = content_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
     content_tag_df = content_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
     tag_list = list(set(content_tag_df['hashtag'].tolist()))
@@ -195,6 +208,8 @@ def read_embedding(embedSet, test_df):
         if tag not in tag_list:
             print(tag)
     '''
+    print("user_num: " + str(len(user_list)))
+    print("tag_num: " + str(len(tag_list)))
     return emb_para_list
 
 
@@ -203,6 +218,7 @@ if __name__ == '__main__':
     test_df = pd.read_table('./wData/test.csv')
 
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
+
     train_df['user_id'] = train_df['user_id'].apply(get_str)
     test_df['user_id'] = test_df['user_id'].apply(get_str)
     train_df['content'] = train_df['content'].apply(get_str)
