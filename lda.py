@@ -243,13 +243,12 @@ def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_t
         f.write("\n")
 
 
-def read_para(content_df):
-    '''
-    user_list = list(set(content_df['user_id'].tolist()))
+def read_para(content_df, test_df):
+    user_list = list(set(test_df['user_id'].tolist()))
     f = open("wData/userList.txt", "w")
     f.write(str(user_list))
     f.close()
-    '''
+
     with open("wData/userList.txt", "r") as f:
         x = f.readlines()[0]
         print(x)
@@ -278,20 +277,23 @@ if __name__ == '__main__':
     embedSet = pd.read_table('./wData/embed.csv')
     #embedSet = embedSet[:10000]
     embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
+    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
     embedSet['user_id'] = embedSet['user_id'].apply(get_str)
     embedSet['content'] = embedSet['content'].apply(get_str)
-    user_list, content_user_df, emb_tag_list, content_tag_df = read_para(embedSet)
+    train_df = pd.read_table('./wData/train.csv')
+    test_df = pd.read_table('./wData/test.csv')
+    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
+    train_df['user_id'] = train_df['user_id'].apply(get_str)
+    test_df['user_id'] = test_df['user_id'].apply(get_str)
+    train_df['content'] = train_df['content'].apply(get_str)
+    test_df['content'] = test_df['content'].apply(get_str)
+
+    user_list, content_user_df, emb_tag_list, content_tag_df = read_para(embedSet, test_df)
     lda_dict = lda(embedSet)
 
     user_arr_dict = average_user_tweet(user_list, content_user_df, lda_dict)
     tag_arr_dict = average_hashtag_tweet(emb_tag_list, content_tag_df, lda_dict)
 
-    train_df = pd.read_table('./wData/train.csv')
-    test_df = pd.read_table('./wData/test.csv')
-    train_df['user_id'] = train_df['user_id'].apply(get_str)
-    test_df['user_id'] = test_df['user_id'].apply(get_str)
-    train_df['content'] = train_df['content'].apply(get_str)
-    test_df['content'] = test_df['content'].apply(get_str)
     train_tag_df, qid_train_dict = sort_train_user_tag(user_list, train_df)
     test_tag_df, qid_test_dict = sort_test_user_tag(user_list, test_df)
 

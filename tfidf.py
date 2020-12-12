@@ -209,6 +209,7 @@ def read_para(content_df):
 if __name__ == '__main__':
     embedSet = pd.read_table('./wData/embed.csv')
     embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
+    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
     embedSet['user_id'] = embedSet['user_id'].apply(get_str)
     embedSet['content'] = embedSet['content'].apply(get_str)
     tf_dict = computeTFIDF(readDocument(embedSet))
@@ -220,6 +221,7 @@ if __name__ == '__main__':
 
     train_df = pd.read_table('./wData/train.csv')
     test_df = pd.read_table('./wData/test.csv')
+    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
     train_df['user_id'] = train_df['user_id'].apply(get_str)
     test_df['user_id'] = test_df['user_id'].apply(get_str)
     train_df['content'] = train_df['content'].apply(get_str)
