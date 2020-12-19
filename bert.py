@@ -66,7 +66,7 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
 
 
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./wBert/trainBert.dat', "a")
+    f = open('./tBert/trainBert.dat', "a")
     for user_num, user in enumerate(user_list):
         print('train_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
@@ -95,8 +95,8 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
 
 
 def rank_input_test(user_list, test_tag_list, user_arr_dict, tag_arr_dict, qid_test_dict):
-    f = open('./wBert/testBert.dat', "a")
-    tagF = open('./wBert/tagList.txt', "a", encoding="utf-8")
+    f = open('./tBert/testBert.dat', "a")
+    tagF = open('./tBert/tagList.txt', "a", encoding="utf-8")
 
     for user_num, user in enumerate(user_list):
         print('test_user_num: ' + str(user_num))
@@ -201,7 +201,7 @@ def read_embedding(content_df, test_df):
 
     # 读userlist，要灵活调换写与读以保持与其他实验的统一
     ''' 
-    with open("wData/userList.txt", "r") as f:
+    with open("tData/userList.txt", "r") as f:
         x = f.readlines()[0]
         print(x)
         user_list = get_hashtag(x)
@@ -229,8 +229,8 @@ def read_embedding(content_df, test_df):
 
 
 if __name__ == '__main__':
-    train_df = pd.read_table('./wData/train.csv')
-    test_df = pd.read_table('./wData/test.csv')
+    train_df = pd.read_table('./tData/train.csv')
+    test_df = pd.read_table('./tData/test.csv')
 
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 
@@ -239,10 +239,10 @@ if __name__ == '__main__':
     train_df['content'] = train_df['content'].apply(get_str)
     test_df['content'] = test_df['content'].apply(get_str)
 
-    with open('./wData/embeddings.json', 'r') as f:
+    with open('./tData/embeddings.json', 'r') as f:
         con_emb_dict = json.load(f)
 
-    embedSet = pd.read_table('./wData/embed.csv')
+    embedSet = pd.read_table('./tData/embed.csv')
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
     embedSet['user_id'] = embedSet['user_id'].apply(get_str)
     embedSet['content'] = embedSet['content'].apply(get_str)

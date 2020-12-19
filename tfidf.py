@@ -38,7 +38,7 @@ def computeTFIDF(documents):
     denselist = dense.tolist()
     df = pd.DataFrame(denselist, columns=feature_names)
 
-    content_df = pd.read_table('./wData/embed.csv')
+    content_df = pd.read_table('./tData/embed.csv')
     documents = content_df['content'].tolist()
     for index, doc in enumerate(documents):
         tf_dict[documents[index]] = df.loc[index].tolist()
@@ -109,7 +109,7 @@ def sort_test_user_tag(user_list, test_df):
 
 
 def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid_train_dict):
-    f = open('./wTf/trainTf.dat', "a")
+    f = open('./tTf/trainTf.dat', "a")
     for user_num, user in enumerate(user_list):
         print('train_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
@@ -137,19 +137,19 @@ def rank_input_train(user_list, train_tag_list, user_arr_dict, tag_arr_dict, qid
         f.write("\n")
 
 
-def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_dict):
+def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_train_dict, qid_test_dict):
     test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
     test_df = test_df.explode('hashtag').groupby(['hashtag'], as_index=False)['hashtag'].agg({'cnt': 'count'})
     test_df = test_df.sort_values(by=['cnt'], ascending=False)
     #test_df = test_df[:600]
     top_tag_list = test_df['hashtag'].tolist()
 
-    f = open('./wTf/testTf.dat', "a")
+    f = open('./tTf/testTf.dat', "a")
     for user_num, user in enumerate(user_list):
         print('test_user_num: ' + str(user_num))
         user_arr = user_arr_dict[user]
         f.write(f"# query {user_num + 1}")
-        positive_tag_list = qid_test_dict[user]
+        positive_tag_list = list(set(qid_test_dict[user]) - set(qid_train_dict))
         for tag in positive_tag_list:  # positive samples
             try:
                 tag_arr = tag_arr_dict[tag]
@@ -162,7 +162,7 @@ def rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_di
             except:
                 print(tag)
 
-        negative_tag_list = list(set(top_tag_list) - set(positive_tag_list))
+        negative_tag_list = list(set(top_tag_list) - set(qid_test_dict[user]) - set(qid_train_dict))
         for tag in negative_tag_list:  # negative samples
             try:
                 tag_arr = tag_arr_dict[tag]
@@ -184,7 +184,7 @@ def read_para(content_df, test_df):
     f.write(str(user_list))
     f.close()
     '''
-    with open("wData/userList.txt", "r") as f:
+    with open("tData/userList.txt", "r") as f:
         x = f.readlines()[0]
         print(x)
         user_list = get_hashtag(x)
@@ -208,13 +208,13 @@ def read_para(content_df, test_df):
 
 
 if __name__ == '__main__':
-    embedSet = pd.read_table('./wData/embed.csv')
+    embedSet = pd.read_table('./tData/embed.csv')
     embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
     embedSet['user_id'] = embedSet['user_id'].apply(get_str)
     embedSet['content'] = embedSet['content'].apply(get_str)
-    train_df = pd.read_table('./wData/train.csv')
-    test_df = pd.read_table('./wData/test.csv')
+    train_df = pd.read_table('./tData/train.csv')
+    test_df = pd.read_table('./tData/test.csv')
     # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
     train_df['user_id'] = train_df['user_id'].apply(get_str)
     test_df['user_id'] = test_df['user_id'].apply(get_str)
@@ -231,4 +231,4 @@ if __name__ == '__main__':
     test_tag_df, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
     rank_input_train(user_list, train_tag_df, user_arr_dict, tag_arr_dict, qid_train_dict)
-    rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_test_dict)
+    rank_input_test(user_list, test_df, user_arr_dict, tag_arr_dict, qid_train_dict, qid_test_dict)
