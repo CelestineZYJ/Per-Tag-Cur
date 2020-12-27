@@ -57,23 +57,26 @@ def read_data(f):
     user = 0
     usersFLI = {}
     userLines = []
-    for line in tqdm(lines):
+    for index, line in tqdm(enumerate(lines)):
         if line[0] == '#':
-            user += 1
             usersFLI[user] = getUserFLI(userLines, oneDict=True)
             userLines = []
+            user += 1
         else:
             userLines.append(line)
-    print(usersFLI[1])
-    print(usersFLI[196])
+        if index == len(lines)-1:
+            usersFLI[user] = getUserFLI(userLines, oneDict=True)
     return usersFLI
 
 
 def all_mlp(train_fli, test_fli):
     for user_id in tqdm(range(1, len(train_fli))):
+        print(user_id)
+        '''
         preF = open('tLda/preLdaMlp.txt', "a")
         preF.write(f"# query {user_id}\n")
-
+        preF.close()
+        '''
         x_train = torch.FloatTensor(train_fli[user_id]['features'])
         y_train = torch.FloatTensor(train_fli[user_id]['labels'])
 
@@ -81,16 +84,13 @@ def all_mlp(train_fli, test_fli):
         y_test = torch.FloatTensor(test_fli[user_id]['labels'])
 
         each_mlp(x_train, y_train, x_test, y_test)
-        preF.close()
 
 
 def each_mlp(x_train, y_train, x_test, y_test):
-    preF = open('tLda/preLdaMlp.txt', "a")
-
     # Model, Criterion, Optimizer
     model = Feedforward(100, 10)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.5)
 
     # train the model
     model.eval()
@@ -99,7 +99,7 @@ def each_mlp(x_train, y_train, x_test, y_test):
     print("test loss before training", before_train.item())
 
     model.train()
-    epoch = 20
+    epoch = 50
 
     for epoch in range(epoch):
         optimizer.zero_grad()
@@ -110,7 +110,7 @@ def each_mlp(x_train, y_train, x_test, y_test):
         # compute loss
         loss = criterion(y_pred.squeeze(), y_train)
 
-        print("Epoch {}: train loss: {}".format(epoch, loss.item()))
+        #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
         # backward pass
         loss.backward()
@@ -119,9 +119,12 @@ def each_mlp(x_train, y_train, x_test, y_test):
     # evaluation
     model.eval()
     y_pred = model(x_test)
+
+    preF = open('tLda/preLdaMlp.txt', "a")
     spe_user_pre = y_pred.detach().numpy().tolist()
     for tag_pre in spe_user_pre:
         preF.write(f"{tag_pre[0]}\n")
+    preF.close()
 
     print(y_pred.squeeze())
     after_train = criterion(y_pred.squeeze(), y_test)
