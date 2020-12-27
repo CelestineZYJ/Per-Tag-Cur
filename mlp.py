@@ -42,6 +42,7 @@ def getUserFLI(userLines, oneDict=False):
             labels.append(1)
             index = index + 1
         else:
+            line = line[8:] + ' '
             features.append([float(feature) for feature in re.findall("\:(\S+)\s", line)])
             labels.append(0)
     features = np.array(features)
@@ -58,46 +59,36 @@ def read_data(f):
     userLines = []
     for line in tqdm(lines):
         if line[0] == '#':
-            usersFLI[user] = getUserFLI(userLines, oneDict=True)
             user += 1
+            usersFLI[user] = getUserFLI(userLines, oneDict=True)
             userLines = []
         else:
             userLines.append(line)
+    print(usersFLI[1])
+    print(usersFLI[196])
     return usersFLI
 
 
 def all_mlp(train_fli, test_fli):
-    for user_id in tqdm(range(4, 6)):
-        print(train_fli[user_id]['index'])
+    for user_id in tqdm(range(1, len(train_fli))):
+        preF = open('tLda/preLdaMlp.txt', "a")
+        preF.write(f"# query {user_id}\n")
+
         x_train = torch.FloatTensor(train_fli[user_id]['features'])
         y_train = torch.FloatTensor(train_fli[user_id]['labels'])
 
         x_test = torch.FloatTensor(test_fli[user_id]['features'])
         y_test = torch.FloatTensor(test_fli[user_id]['labels'])
-        print(len(x_test))
-        print(x_test)
-        print(len(y_test))
-        print(y_test)
 
         each_mlp(x_train, y_train, x_test, y_test)
-
-    '''
-    x_train, y_train = make_blobs(n_samples=40, n_features=2, cluster_std=1.5, shuffle=True)
-    x_train = torch.FloatTensor(x_train)
-    y_train = torch.FloatTensor(blob_label(y_train, 1, [0]))  # negative sample
-    y_train = torch.FloatTensor(blob_label(y_train, 0, [1, 2, 3]))  # positive sample
-
-    x_test, y_test = make_blobs(n_samples=10, n_features=2, cluster_std=1.5, shuffle=True)
-    x_test = torch.FloatTensor(x_test)
-    y_test = torch.FloatTensor(blob_label(y_test, 1, [0]))
-    y_test = torch.FloatTensor(blob_label(y_test, 0, [1, 2, 3]))
-    each_mlp(x_train, y_train, x_test, y_test)
-    '''
+        preF.close()
 
 
 def each_mlp(x_train, y_train, x_test, y_test):
+    preF = open('tLda/preLdaMlp.txt', "a")
+
     # Model, Criterion, Optimizer
-    model = Feedforward(264, 10)
+    model = Feedforward(100, 10)
     criterion = torch.nn.BCELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
@@ -128,14 +119,18 @@ def each_mlp(x_train, y_train, x_test, y_test):
     # evaluation
     model.eval()
     y_pred = model(x_test)
+    spe_user_pre = y_pred.detach().numpy().tolist()
+    for tag_pre in spe_user_pre:
+        preF.write(f"{tag_pre[0]}\n")
+
     print(y_pred.squeeze())
     after_train = criterion(y_pred.squeeze(), y_test)
     print("test loss after training", after_train.item())
 
 
 if __name__ == "__main__":
-    trainF = open("wTf/trainTf.dat", "r", encoding="utf-8")
-    testF = open("wTf/testTf.dat", "r", encoding="utf-8")
+    trainF = open("tLda/trainLda.dat", "r", encoding="utf-8")
+    testF = open("tLda/testLda.dat", "r", encoding="utf-8")
     train_fli = read_data(trainF)
     test_fli = read_data(testF)
     all_mlp(train_fli, test_fli)
