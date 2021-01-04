@@ -33,9 +33,9 @@ def content_embedding(content, con_emb_dict):
 
 def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
     tag_arr_dict = {}
-    print(len(tag_list))
+    #print(len(tag_list))
     for index, tag in enumerate(tag_list):
-        print(str(index)+tag)
+        #print(str(index)+tag)
         embed_list = []
         content_list = content_tag_df['content'].loc[(content_tag_df['hashtag']) == tag].tolist()[0]
 
@@ -88,7 +88,7 @@ def read_embedding(content_df, test_df):
     '''
     with open("tData/userList.txt", "r") as f:
         x = f.readlines()[0]
-        print(x)
+        #print(x)
         user_list = get_hashtag(x)
         print(user_list)
 
@@ -140,13 +140,15 @@ test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
 
 class LstmMlp(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, user_id):
+    def __init__(self, user_id, input_size, hidden_size):
         super(LstmMlp, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.user_id = user_id
-        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
+        self.fc1 = torch.nn.Linear(self.input_size*2, self.hidden_size)
         self.relu = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(self.hidden_size, 1)
+        self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, x):
         # user modeling: calculate user embedding
@@ -154,11 +156,19 @@ class LstmMlp(torch.nn.Module):
         lstm_inputs = []
         content_list = content_user_df['content'].loc[(content_user_df['user_id']) == self.user_id].tolist()[0]
         for content in content_list:
-            lstm_inputs.append(torch.tensor([content_embedding(content, con_emb_dict)]))
+            lstm_inputs.append(torch.tensor(content_embedding(content, con_emb_dict)))
 
-        lstm_inputs = torch.cat(lstm_inputs).view(len(lstm_inputs), 1, -1)
-        lstm_output = lstm(lstm_inputs)
-        user_arr = lstm_output.numpy()  # lstm_output is user modeling
+        lstm_output, lstm_hidden = lstm(lstm_inputs[0].view(1, 1, -1))
+        for i in lstm_inputs[:-1]:
+            # Step through the sequence one element at a time.
+            # after each step, hidden contains the hidden state.
+            lstm_output, lstm_hidden = lstm(i.view(1, 1, -1), lstm_hidden)
+
+        lstm_output, lstm_hidden = lstm(lstm_inputs[-1].view(1, 1, -1), lstm_hidden)
+
+        user_arr = lstm_output.detach().numpy()[0][0]  # lstm_output is user modeling
+        #print(user_arr)
+        #print(len(user_arr)) #768
 
         if x == "train":
             feature_train = []
@@ -179,8 +189,12 @@ class LstmMlp(torch.nn.Module):
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_train.append(user_tag_arr)
                 label_train.append(0)  # negative sample label: 0
-            mlp_input = torch.tensor(feature_train)
-            mlp_label = torch.tensor(label_train)
+
+            feature_train = np.array(feature_train)
+            label_train = np.array(label_train)
+
+            mlp_input = torch.FloatTensor(feature_train)
+            mlp_label = torch.FloatTensor(label_train)
 
         if x == "test":
             feature_test = []
@@ -190,21 +204,80 @@ class LstmMlp(torch.nn.Module):
             for tag in positive_tag_list:
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-                feature_train.append(user_tag_arr)
-                label_train.append(1)  # positive sample label: 1
+                feature_test.append(user_tag_arr)
+                label_test.append(1)  # positive sample label: 1
 
             # negative samples
             negative_tag_list = list(set(test_tag_list) - set(positive_tag_list))
             for tag in negative_tag_list:  # negative samples
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-                feature_train.append(user_tag_arr)
-                label_train.append(0)  # negative sample label: 0
-            mlp_input = torch.tensor(feature_test)
-            mlp_label = torch.tensor(label_test)
+                feature_test.append(user_tag_arr)
+                label_test.append(0)  # negative sample label: 0
+
+            #print(feature_test[0])
+            #print(type(feature_test[0]))
+            #print(len(feature_test[0]))
+
+            feature_test = np.array(feature_test)
+            label_test = np.array(label_test)
+
+            #print(feature_test)
+            #print(type(feature_test))
+            #print(len(feature_test))
+
+            mlp_input = torch.FloatTensor(feature_test)
+            mlp_label = torch.FloatTensor(label_test)
 
         mlp_hidden = self.fc1(mlp_input)
         mlp_relu = self.relu(mlp_hidden)
         mlp_output = self.fc2(mlp_relu)
         mlp_output = self.sigmoid(mlp_output)
         return mlp_output, mlp_label
+
+
+def all_user():
+    for user_id in tqdm(user_list):
+        each_user(user_id)
+
+
+def each_user(user_id):
+    # model, criterion, optimizer
+    model = LstmMlp(user_id, 768, 30)
+    criterion = torch.nn.BCELoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.5)
+
+    # train the model
+    model.eval()
+    label_pred, label_test = model("test")
+
+    before_train = criterion(label_pred.squeeze(), label_test)
+    print("test loss before training", before_train.item())
+
+    model.train()
+    epoch = 10
+
+    for epoch in range(epoch):
+        optimizer.zero_grad()
+
+        # forward pass
+        label_pred, label_train = model("train")
+
+        # compute loss
+        loss = criterion(label_pred.squeeze(), label_train)
+
+        # backward pass
+        loss.backward()
+        optimizer.step()
+
+    # evaluation
+    model.eval()
+    label_pred, label_test = model("test")
+
+    print(label_pred.squeeze())
+    after_train = criterion(label_pred.squeeze(), label_test)
+    print("test loss after train", after_train.item())
+
+
+if __name__ == "__main__":
+    all_user()
