@@ -1,32 +1,12 @@
 #  -*- coding: utf-8 -*-
-import numpy as np
 import pandas as pd
 import re
 import json
 import random
-from sklearn.datasets import make_blobs
 import numpy as np
 import torch
 import re
 from tqdm import tqdm
-
-
-class Feedforward(torch.nn.Module):
-    def __init__(self, input_size, hidden_size):
-        super(Feedforward, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.relu = torch.nn.ReLU()
-        self.fc2 = torch.nn.Linear(self.hidden_size, 1)
-        self.sigmoid = torch.nn.Sigmoid()
-
-    def forward(self, x):
-        hidden = self.fc1(x)
-        relu = self.relu(hidden)
-        output = self.fc2(relu)
-        output = self.sigmoid(output)
-        return output
 
 
 def get_hashtag(content):
@@ -49,24 +29,6 @@ def content_embedding(content, con_emb_dict):
         return con_emb_dict[content]
     #except:
         #return [0]*768
-
-
-def average_user_tweet(user_list, content_user_df, con_emb_dict):
-    user_arr_dict = {}
-    for user in user_list:
-        embed_list = []
-        x = content_user_df['content'].loc[(content_user_df['user_id']) == user].tolist()
-        #print(x)
-        content_list = x[0]
-
-        for content in content_list:
-            embed_list.append(content_embedding(content, con_emb_dict))
-        embed_list = np.mean(np.array(embed_list), axis=0)
-        user_arr_dict[user] = embed_list
-
-    print(user_arr_dict)
-    print("function: average_user_tweet()")
-    return user_arr_dict
 
 
 def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
@@ -114,109 +76,6 @@ def sort_test_user_tag(user_list, test_df):
     return test_tag_list, qid_user_tag_dict
 
 
-# create random data points
-def blob_label(y, label, loc):  # assign labels
-    target = np.copy(y)
-    for l in loc:
-        target[y == l] = label
-    return target
-
-
-def all_user(user_list, user_arr_dict, tag_arr_dict, qid_train_dict, qid_test_dict, train_tag_list, test_tag_list):
-    i = 0
-    for user in tqdm(user_list):
-        i += 1
-        print(i)
-        '''
-        preF = open('tLda/preLdaMlp.txt', "a")
-        preF.write(f"# query {user_id}\n")
-        preF.close()
-        '''
-
-        x_train = []
-        y_train = []
-
-        user_arr = user_arr_dict[user]  # user embedding
-        positive_tag_list = qid_train_dict[user]
-        for tag in positive_tag_list:  # positive samples
-            tag_arr = tag_arr_dict[tag]
-            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-            x_train.append(user_tag_arr)
-            y_train.append(1)  # positive sample label: 1
-
-        temp_tag_list = list(set(train_tag_list)-set(positive_tag_list))
-        negative_tag_list = random.sample(temp_tag_list, 5*len(positive_tag_list))
-        for tag in negative_tag_list:  # negative samples
-            tag_arr = tag_arr_dict[tag]
-            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-            x_train.append(user_tag_arr)
-            y_train.append(0)  # negative sample label: 0
-
-        x_test = []
-        y_test = []
-
-        positive_tag_list = qid_test_dict[user]
-        for tag in positive_tag_list:  # positive samples
-            tag_arr = tag_arr_dict[tag]
-            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-            x_train.append(user_tag_arr)
-            y_train.append(1)  # positive sample label: 1
-
-        negative_tag_list = list(set(test_tag_list) - set(positive_tag_list))
-        for tag in negative_tag_list:  # negative samples
-            tag_arr = tag_arr_dict[tag]
-            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
-            x_train.append(user_tag_arr)
-            y_train.append(0)  # negative sample label: 0
-
-        each_user(x_train, y_train, x_test, y_test)
-
-
-def each_user(x_train, y_train, x_test, y_test):
-    # Model, Criterion, Optimizer
-    model = Feedforward(100, 30)
-    criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.5)
-
-    # train the model
-    model.eval()
-    y_pred = model(x_test)
-    before_train = criterion(y_pred.squeeze(), y_test)
-    print("test loss before training", before_train.item())
-
-    model.train()
-    epoch = 50
-
-    for epoch in range(epoch):
-        optimizer.zero_grad()
-
-        # forward pass
-        y_pred = model(x_train)
-
-        # compute loss
-        loss = criterion(y_pred.squeeze(), y_train)
-
-        #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
-
-        # backward pass
-        loss.backward()
-        optimizer.step()
-
-    # evaluation
-    model.eval()
-    y_pred = model(x_test)
-
-    preF = open('tBert/preBertMlp.txt', "a")
-    spe_user_pre = y_pred.detach().numpy().tolist()
-    for tag_pre in spe_user_pre:
-        preF.write(f"{tag_pre[0]}\n")
-    preF.close()
-
-    print(y_pred.squeeze())
-    after_train = criterion(y_pred.squeeze(), y_test)
-    print("test loss after training", after_train.item())
-
-
 def read_embedding(content_df, test_df):
     # 写userList
     '''
@@ -254,31 +113,95 @@ def read_embedding(content_df, test_df):
     return user_list, content_user_df, tag_list, content_tag_df
 
 
-if __name__ == '__main__':
-    train_df = pd.read_table('./tData/train.csv')
-    test_df = pd.read_table('./tData/test.csv')
+train_df = pd.read_table('./tData/train.csv')
+test_df = pd.read_table('./tData/test.csv')
 
-    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
+# 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 
-    train_df['user_id'] = train_df['user_id'].apply(get_str)
-    test_df['user_id'] = test_df['user_id'].apply(get_str)
-    train_df['content'] = train_df['content'].apply(get_str)
-    test_df['content'] = test_df['content'].apply(get_str)
+train_df['user_id'] = train_df['user_id'].apply(get_str)
+test_df['user_id'] = test_df['user_id'].apply(get_str)
+train_df['content'] = train_df['content'].apply(get_str)
+test_df['content'] = test_df['content'].apply(get_str)
 
-    with open('./tData/embeddings.json', 'r') as f:
-        con_emb_dict = json.load(f)
+with open('./tData/embeddings.json', 'r') as f:
+    con_emb_dict = json.load(f)
 
-    embedSet = pd.read_table('./tData/embed.csv')
-    # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
-    embedSet['user_id'] = embedSet['user_id'].apply(get_str)
-    embedSet['content'] = embedSet['content'].apply(get_str)
-    embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
-    user_list, content_user_df, tag_list, content_tag_df = read_embedding(embedSet, test_df)
+embedSet = pd.read_table('./tData/embed.csv')
+# 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
+embedSet['user_id'] = embedSet['user_id'].apply(get_str)
+embedSet['content'] = embedSet['content'].apply(get_str)
+embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
+user_list, content_user_df, tag_list, content_tag_df = read_embedding(embedSet, test_df)
 
-    user_arr_dict = average_user_tweet(user_list, content_user_df, con_emb_dict)
-    tag_arr_dict = average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict)
+tag_arr_dict = average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict)
 
-    train_tag_list, qid_train_dict = sort_train_user_tag(user_list, train_df)
-    test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
+train_tag_list, qid_train_dict = sort_train_user_tag(user_list, train_df)
+test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
-    all_user(user_list, user_arr_dict, tag_arr_dict, qid_train_dict, qid_test_dict, train_tag_list, test_tag_list)
+
+class LstmMlp(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, user_id):
+        super(LstmMlp, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.user_id = user_id
+        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x):
+        # user modeling: calculate user embedding
+        lstm = torch.nn.LSTM(self.input_size, self.input_size)
+        lstm_inputs = []
+        content_list = content_user_df['content'].loc[(content_user_df['user_id']) == self.user_id].tolist()[0]
+        for content in content_list:
+            lstm_inputs.append(torch.tensor([content_embedding(content, con_emb_dict)]))
+
+        lstm_inputs = torch.cat(lstm_inputs).view(len(lstm_inputs), 1, -1)
+        lstm_output = lstm(lstm_inputs)
+        user_arr = lstm_output.numpy()  # lstm_output is user modeling
+
+        if x == "train":
+            feature_train = []
+            label_train = []
+            # positive samples
+            positive_tag_list = qid_train_dict[self.user_id]
+            for tag in positive_tag_list:
+                tag_arr = tag_arr_dict[tag]
+                user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+                feature_train.append(user_tag_arr)
+                label_train.append(1)  # positive sample label: 1
+
+            # negative samples
+            temp_tag_list = list(set(train_tag_list)-set(positive_tag_list))
+            negative_tag_list = random.sample(temp_tag_list, 5*len(positive_tag_list))
+            for tag in negative_tag_list:
+                tag_arr = tag_arr_dict[tag]
+                user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+                feature_train.append(user_tag_arr)
+                label_train.append(0)  # negative sample label: 0
+
+        if x == "test":
+            feature_test = []
+            label_test = []
+            # positive samples
+            positive_tag_list = qid_train_dict[self.user_id]
+            for tag in positive_tag_list:
+                tag_arr = tag_arr_dict[tag]
+                user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+                feature_train.append(user_tag_arr)
+                label_train.append(1)  # positive sample label: 1
+
+            # negative samples
+            negative_tag_list = list(set(test_tag_list) - set(positive_tag_list))
+            for tag in negative_tag_list:  # negative samples
+                tag_arr = tag_arr_dict[tag]
+                user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+                feature_train.append(user_tag_arr)
+                label_train.append(0)  # negative sample label: 0
+
+
+        mlp_hidden = self.fc1(xxxxxxxxx)
+        mlp_relu = self.relu(mlp_hidden)
+        mlp_output = self.fc2(mlp_relu)
+        mlp_output = self.sigmoid(mlp_output)
+        return mlp_output
