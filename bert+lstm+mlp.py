@@ -255,7 +255,7 @@ def each_user(user_id):
     print("test loss before training", before_train.item())
 
     model.train()
-    epoch = 10
+    epoch = 50
 
     for epoch in range(epoch):
         optimizer.zero_grad()
@@ -281,6 +281,7 @@ def each_user(user_id):
     preF.close()
 
     print(label_pred.squeeze())
+    print(label_test)
     after_train = criterion(label_pred.squeeze(), label_test)
     print("test loss after train", after_train.item())
 
