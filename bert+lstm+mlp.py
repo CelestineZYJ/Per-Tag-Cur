@@ -179,6 +179,8 @@ class LstmMlp(torch.nn.Module):
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_train.append(user_tag_arr)
                 label_train.append(0)  # negative sample label: 0
+            mlp_input = torch.tensor(feature_train)
+            mlp_label = torch.tensor(label_train)
 
         if x == "test":
             feature_test = []
@@ -198,10 +200,11 @@ class LstmMlp(torch.nn.Module):
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_train.append(user_tag_arr)
                 label_train.append(0)  # negative sample label: 0
+            mlp_input = torch.tensor(feature_test)
+            mlp_label = torch.tensor(label_test)
 
-
-        mlp_hidden = self.fc1(xxxxxxxxx)
+        mlp_hidden = self.fc1(mlp_input)
         mlp_relu = self.relu(mlp_hidden)
         mlp_output = self.fc2(mlp_relu)
         mlp_output = self.sigmoid(mlp_output)
-        return mlp_output
+        return mlp_output, mlp_label
