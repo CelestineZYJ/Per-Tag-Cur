@@ -274,6 +274,12 @@ def each_user(user_id):
     model.eval()
     label_pred, label_test = model("test")
 
+    preF = open('tBert/preBertLstmMlp.txt', "a")
+    spe_user_pre = label_pred.detach().numpy().tolist()
+    for tag_pre in spe_user_pre:
+        preF.write(f"{tag_pre[0]}\n")
+    preF.close()
+
     print(label_pred.squeeze())
     after_train = criterion(label_pred.squeeze(), label_test)
     print("test loss after train", after_train.item())
