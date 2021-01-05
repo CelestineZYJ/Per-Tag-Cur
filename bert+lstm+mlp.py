@@ -140,10 +140,11 @@ test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
 
 class LstmMlp(torch.nn.Module):
-    def __init__(self, user_id, input_size, hidden_size):
+    def __init__(self, user_num, user_id, input_size, hidden_size):
         super(LstmMlp, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.user_num = user_num
         self.user_id = user_id
         self.fc1 = torch.nn.Linear(self.input_size*2, self.hidden_size)
         self.relu = torch.nn.ReLU()
@@ -171,6 +172,10 @@ class LstmMlp(torch.nn.Module):
         #print(len(user_arr)) #768
 
         if x == "train":
+            '''
+            trainF = open('./tBert/trainBert.dat', "a")
+            trainF.write(f"# query {self.user_num + 1}")
+            '''
             feature_train = []
             label_train = []
             # positive samples
@@ -179,8 +184,15 @@ class LstmMlp(torch.nn.Module):
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_train.append(user_tag_arr)
-                label_train.append(1)  # positive sample label: 1
-
+                x = 1
+                label_train.append(x)  # positive sample label: 1
+                '''
+                # write qid train file
+                Str = f"\n{x} {'qid'}:{self.user_num + 1}"
+                for index, value in enumerate(user_tag_arr):
+                    Str += f" {index + 1}:{value}"
+                trainF.write(Str)
+                '''
             # negative samples
             temp_tag_list = list(set(train_tag_list)-set(positive_tag_list))
             negative_tag_list = random.sample(temp_tag_list, 5*len(positive_tag_list))
@@ -188,8 +200,17 @@ class LstmMlp(torch.nn.Module):
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_train.append(user_tag_arr)
-                label_train.append(0)  # negative sample label: 0
-
+                x = 0
+                label_train.append(x)  # negative sample label: 0
+            '''
+                # write qid train file
+                Str = f"\n{x} {'qid'}:{self.user_num + 1}"
+                for index, value in enumerate(user_tag_arr):
+                    Str += f" {index + 1}:{value}"
+                trainF.write(Str)
+            trainF.write("\n")
+            trainF.close()
+            '''
             feature_train = np.array(feature_train)
             label_train = np.array(label_train)
 
@@ -197,6 +218,9 @@ class LstmMlp(torch.nn.Module):
             mlp_label = torch.FloatTensor(label_train)
 
         if x == "test":
+            testF = open('./tBert/testBert.dat', "a")
+            testF.write(f"# query {self.user_num + 1}")
+
             feature_test = []
             label_test = []
             # positive samples
@@ -205,7 +229,14 @@ class LstmMlp(torch.nn.Module):
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_test.append(user_tag_arr)
-                label_test.append(1)  # positive sample label: 1
+                x = 1
+                label_test.append(x)  # positive sample label: 1
+
+                # write qid test file
+                Str = f"\n{x} {'qid'}:{self.user_num + 1}"
+                for index, value in enumerate(user_tag_arr):
+                    Str += f" {index + 1}:{value}"
+                testF.write(Str)
 
             # negative samples
             negative_tag_list = list(set(test_tag_list) - set(positive_tag_list))
@@ -213,7 +244,16 @@ class LstmMlp(torch.nn.Module):
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_test.append(user_tag_arr)
-                label_test.append(0)  # negative sample label: 0
+                x = 0
+                label_test.append(x)  # negative sample label: 0
+
+                # write qid test file
+                Str = f"\n{x} {'qid'}:{self.user_num + 1}"
+                for index, value in enumerate(user_tag_arr):
+                    Str += f" {index + 1}:{value}"
+                testF.write(Str)
+            testF.write("\n")
+            testF.close()
 
             #print(feature_test[0])
             #print(type(feature_test[0]))
@@ -237,23 +277,24 @@ class LstmMlp(torch.nn.Module):
 
 
 def all_user():
-    for user_id in tqdm(user_list):
-        each_user(user_id)
+    for user_num, user_id in tqdm(enumerate(user_list)):
+        each_user(user_num, user_id)
 
 
-def each_user(user_id):
+def each_user(user_num, user_id):
     # model, criterion, optimizer
-    model = LstmMlp(user_id, 768, 30)
+    model = LstmMlp(user_num, user_id, 768, 30)
     criterion = torch.nn.BCELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.5)
 
     # train the model
+    '''
     model.eval()
     label_pred, label_test = model("test")
 
     before_train = criterion(label_pred.squeeze(), label_test)
     print("test loss before training", before_train.item())
-
+    '''
     model.train()
     epoch = 50
 
