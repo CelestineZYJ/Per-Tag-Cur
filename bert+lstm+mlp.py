@@ -173,7 +173,7 @@ class LstmMlp(torch.nn.Module):
 
         if x == "train":
             '''
-            trainF = open('./tBert/trainBert.dat', "a")
+            trainF = open('./tBert/trainBertLstm.dat', "a")
             trainF.write(f"# query {self.user_num + 1}")
             '''
             feature_train = []
@@ -218,7 +218,7 @@ class LstmMlp(torch.nn.Module):
             mlp_label = torch.FloatTensor(label_train)
 
         if x == "test":
-            testF = open('./tBert/testBert.dat', "a")
+            testF = open('./tBert/testBertLstm.dat', "a")
             testF.write(f"# query {self.user_num + 1}")
 
             feature_test = []
@@ -277,8 +277,10 @@ class LstmMlp(torch.nn.Module):
 
 
 def all_user():
-    for user_num, user_id in tqdm(enumerate(user_list)):
+    user_num = 0
+    for user_id in tqdm(user_list):
         each_user(user_num, user_id)
+        user_num += 1
 
 
 def each_user(user_num, user_id):
@@ -296,7 +298,7 @@ def each_user(user_num, user_id):
     print("test loss before training", before_train.item())
     '''
     model.train()
-    epoch = 50
+    epoch = 80
 
     for epoch in range(epoch):
         optimizer.zero_grad()
