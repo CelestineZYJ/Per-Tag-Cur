@@ -318,14 +318,14 @@ def each_user(feature_train, label_train, feature_valid, label_valid, feature_te
     # model, criterion, optimizer
     model = Feedforward(768, 30)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.5, momentum=0.9)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, threshold=0.001, threshold_mode='rel', cooldown=0, min_lr=0, verbose=False)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.5)#, momentum=0.9)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.8, patience=5, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
     # evaluate before train
     model.eval()
     label_pred = model(feature_test)
     before_train = criterion(label_pred.squeeze(), label_test)
-    print("\ntest loss before training", before_train.item())
+    #print("\ntest loss before training", before_train.item())
 
     # train the model
     model.train()
@@ -344,12 +344,13 @@ def each_user(feature_train, label_train, feature_valid, label_valid, feature_te
         # backward pass
         loss.backward()
         optimizer.step()
-
+        #'''
         # validate process----------------------------------
         optimizer.zero_grad()
         label_pred = model(feature_valid)
         val_loss = criterion(label_pred.squeeze(), label_valid)
         scheduler.step(val_loss)
+        #'''
 
     # evalution
     model.eval()
@@ -362,7 +363,7 @@ def each_user(feature_train, label_train, feature_valid, label_valid, feature_te
     preF.close()
 
     print(label_pred.squeeze())
-    print(label_test)
+    #print(label_test)
     after_train = criterion(label_pred.squeeze(), label_test)
     print("test loss after training", after_train.item())
 
