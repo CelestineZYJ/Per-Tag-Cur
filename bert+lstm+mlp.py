@@ -86,7 +86,7 @@ def read_embedding(content_df, test_df):
 
     # 读userlist，要灵活调换写与读以保持与其他实验的统一
     '''
-    with open("tData/userList.txt", "r") as f:
+    with open("tData2/userList.txt", "r") as f:
         x = f.readlines()[0]
         #print(x)
         user_list = get_hashtag(x)
@@ -113,8 +113,8 @@ def read_embedding(content_df, test_df):
     return user_list, content_user_df, tag_list, content_tag_df
 
 
-train_df = pd.read_table('./tData/train.csv')
-test_df = pd.read_table('./tData/test.csv')
+train_df = pd.read_table('./tData2/train.csv')
+test_df = pd.read_table('./tData2/test.csv')
 
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 
@@ -123,10 +123,10 @@ test_df['user_id'] = test_df['user_id'].apply(get_str)
 train_df['content'] = train_df['content'].apply(get_str)
 test_df['content'] = test_df['content'].apply(get_str)
 
-with open('./tData/embeddings.json', 'r') as f:
+with open('./tData2/embeddings.json', 'r') as f:
     con_emb_dict = json.load(f)
 
-embedSet = pd.read_table('./tData/embed.csv')
+embedSet = pd.read_table('./tData2/embed.csv')
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 embedSet['user_id'] = embedSet['user_id'].apply(get_str)
 embedSet['content'] = embedSet['content'].apply(get_str)
@@ -218,8 +218,11 @@ class LstmMlp(torch.nn.Module):
             mlp_label = torch.FloatTensor(label_train)
 
         if x == "test":
-            testF = open('./tBert/testBertLstm.dat', "a")
+            testF = open('./tBert/testBertLstmMlp2.dat', "a")
             testF.write(f"# query {self.user_num + 1}")
+
+            testF2 = open('./tBert/testBertLstmMlp3.dat', "a")
+            testF2.write(f"# query {self.user_num + 1}")
 
             feature_test = []
             label_test = []
@@ -234,6 +237,8 @@ class LstmMlp(torch.nn.Module):
 
                 # write qid test file
                 Str = f"\n{x} {'qid'}:{self.user_num + 1}"
+                testF2.write(Str)
+
                 for index, value in enumerate(user_tag_arr):
                     Str += f" {index + 1}:{value}"
                 testF.write(Str)
@@ -249,11 +254,16 @@ class LstmMlp(torch.nn.Module):
 
                 # write qid test file
                 Str = f"\n{x} {'qid'}:{self.user_num + 1}"
+                testF2.write(Str)
+
                 for index, value in enumerate(user_tag_arr):
                     Str += f" {index + 1}:{value}"
                 testF.write(Str)
+
             testF.write("\n")
+            testF2.write("\n")
             testF.close()
+            testF2.close()
 
             #print(feature_test[0])
             #print(type(feature_test[0]))
@@ -278,7 +288,7 @@ class LstmMlp(torch.nn.Module):
 
 def all_user():
     user_num = 0
-    for user_id in tqdm(user_list):
+    for user_id in tqdm(user_list[:149]):
         each_user(user_num, user_id)
         user_num += 1
 
@@ -298,7 +308,7 @@ def each_user(user_num, user_id):
     print("test loss before training", before_train.item())
     '''
     model.train()
-    epoch = 80
+    epoch = 50
 
     for epoch in range(epoch):
         optimizer.zero_grad()
@@ -317,7 +327,8 @@ def each_user(user_num, user_id):
     model.eval()
     label_pred, label_test = model("test")
 
-    preF = open('tBert/preBertLstmMlp.txt', "a")
+    preF = open('tBert/preBertLstmMlp2.txt', "a")
+    #preF.write(f"# query {user_num + 1}\n")
     spe_user_pre = label_pred.detach().numpy().tolist()
     for tag_pre in spe_user_pre:
         preF.write(f"{tag_pre[0]}\n")
