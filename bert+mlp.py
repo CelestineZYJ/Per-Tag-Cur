@@ -81,6 +81,19 @@ def sort_train_user_tag(user_list, train_df):
     return train_tag_list, qid_user_tag_dict
 
 
+def sort_valid_user_tag(user_list, valid_df):
+    valid_df['hashtag'] = valid_df['hashtag'].apply(get_hashtag)
+    valid_tag_list = list(set(valid_df['hashtag'].explode('hashtag').tolist()))
+    qid_user_tag_dict = {}
+    for user in user_list:
+        spe_user_df = valid_df.loc[valid_df['user_id'] == user]
+        spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
+        qid_user_tag_dict[user] = spe_user_tag_list
+
+    print(qid_user_tag_dict)
+    return valid_tag_list, qid_user_tag_dict
+
+
 def sort_test_user_tag(user_list, test_df):
     test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
     test_tag_list = list(set(test_df['hashtag'].explode('hashtag').tolist()))
@@ -133,13 +146,16 @@ def read_embedding(content_df, test_df):
 
 train_df = pd.read_table('./tData2/train.csv')
 test_df = pd.read_table('./tData2/test.csv')
+valid_df = pd.read_table('./tData2/validation.csv')
 
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 
 train_df['user_id'] = train_df['user_id'].apply(get_str)
 test_df['user_id'] = test_df['user_id'].apply(get_str)
+valid_df['user_id'] = valid_df['user_id'].apply(get_str)
 train_df['content'] = train_df['content'].apply(get_str)
 test_df['content'] = test_df['content'].apply(get_str)
+valid_df['content'] = valid_df['content'].apply(get_str)
 
 with open('./tData2/embeddings.json', 'r') as f:
     con_emb_dict = json.load(f)
@@ -155,6 +171,7 @@ user_arr_dict = average_user_tweet(user_list, content_user_df, con_emb_dict)
 tag_arr_dict = average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict)
 
 train_tag_list, qid_train_dict = sort_train_user_tag(user_list, train_df)
+valid_tag_list, qid_valid_dict = sort_valid_user_tag(user_list, valid_df)
 test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
 
 
@@ -178,7 +195,7 @@ class Feedforward(torch.nn.Module):
 
 def all_user(user_list):
     user_num = 0
-    for user_id in tqdm(user_list):
+    for user_id in tqdm(user_list[:149]):
         user_arr = user_arr_dict[user_id]  # type nparr
 
         # train
@@ -209,9 +226,40 @@ def all_user(user_list):
         feature_train = torch.FloatTensor(feature_train)
         label_train = torch.FloatTensor(label_train)
 
+        # validate
+        feature_valid = []
+        label_valid = []
+        # positive samples
+        positive_tag_list = qid_valid_dict[user_id]
+        for tag in positive_tag_list:
+            tag_arr = tag_arr_dict[tag]
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+            feature_valid.append(user_tag_arr)
+            x = 1
+            label_valid.append(x)  # positive sample label: 1
+
+        # negative samples
+        temp_tag_list = list(set(valid_tag_list) - set(positive_tag_list))
+        negative_tag_list = random.sample(temp_tag_list, 5 * len(positive_tag_list))
+        for tag in negative_tag_list:
+            tag_arr = tag_arr_dict[tag]
+            user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
+            feature_valid.append(user_tag_arr)
+            x = 0
+            label_valid.append(x)  # negative sample label: 0
+
+        feature_valid = np.array(feature_valid)
+        label_valid = np.array(label_valid)
+
+        feature_valid = torch.FloatTensor(feature_valid)
+        label_valid = torch.FloatTensor(label_valid)
+
         # test
-        testF = open('./tBert/testBertMlp.dat', "a")
+        testF = open('./tBertMlp/testBertMlp.dat', "a")
         testF.write(f"# query {user_num + 1}")
+
+        testF2 = open('./tBertMlp/testBertMlp2.dat', "a")
+        testF2.write(f"# query {user_num + 1}")
 
         feature_test = []
         label_test = []
@@ -226,6 +274,7 @@ def all_user(user_list):
 
             # write qid test file
             Str = f"\n{x} {'qid'}:{user_num + 1}"
+            testF2.write(Str)
             for index, value in enumerate(user_tag_arr):
                 Str += f" {index + 1}:{value}"
             testF.write(Str)
@@ -241,11 +290,14 @@ def all_user(user_list):
 
             # write qid test file
             Str = f"\n{x} {'qid'}:{user_num + 1}"
+            testF2.write(Str)
             for index, value in enumerate(user_tag_arr):
                 Str += f" {index + 1}:{value}"
             testF.write(Str)
         testF.write("\n")
+        testF2.write("\n")
         testF.close()
+        testF2.close()
 
         # print(feature_test[0])
         # print(type(feature_test[0]))
@@ -257,27 +309,30 @@ def all_user(user_list):
         feature_test = torch.FloatTensor(feature_test)
         label_test = torch.FloatTensor(label_test)
 
-        each_user(feature_train, label_train, feature_test, label_test)
+        each_user(feature_train, label_train, feature_valid, label_valid, feature_test, label_test)
 
         user_num += 1
 
 
-def each_user(feature_train, label_train, feature_test, label_test):
+def each_user(feature_train, label_train, feature_valid, label_valid, feature_test, label_test):
     # model, criterion, optimizer
     model = Feedforward(768, 30)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.5)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.5, momentum=0.9)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, threshold=0.001, threshold_mode='rel', cooldown=0, min_lr=0, verbose=False)
 
-    # train the model
+    # evaluate before train
     model.eval()
     label_pred = model(feature_test)
     before_train = criterion(label_pred.squeeze(), label_test)
     print("\ntest loss before training", before_train.item())
 
+    # train the model
     model.train()
     epoch = 50
 
     for epoch in range(epoch):
+        # train process-----------------------------------
         optimizer.zero_grad()
 
         # forward pass
@@ -290,11 +345,17 @@ def each_user(feature_train, label_train, feature_test, label_test):
         loss.backward()
         optimizer.step()
 
+        # validate process----------------------------------
+        optimizer.zero_grad()
+        label_pred = model(feature_valid)
+        val_loss = criterion(label_pred.squeeze(), label_valid)
+        scheduler.step(val_loss)
+
     # evalution
     model.eval()
     label_pred = model(feature_test)
 
-    preF = open('tBert/preBertMlp.txt', "a")
+    preF = open('tBertMlp/preBertMlp.txt', "a")
     spe_user_pre = label_pred.detach().numpy().tolist()
     for tag_pre in spe_user_pre:
         preF.write(f"{tag_pre[0]}\n")
