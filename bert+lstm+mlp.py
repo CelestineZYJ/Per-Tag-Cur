@@ -50,6 +50,19 @@ def average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict):
     return tag_arr_dict
 
 
+def sort_embed_user_tag(user_list, embed_df):
+    embed_df['hashtag'] = embed_df['hashtag'].apply(get_hashtag)
+    embed_tag_list = list(set(embed_df['hashtag'].explode('hashtag').tolist()))
+    qid_user_tag_dict = {}
+    for user in user_list:
+        spe_user_df = embed_df.loc[embed_df['user_id'] == user]
+        spe_user_tag_list = list(set(spe_user_df['hashtag'].explode('hashtag').tolist()))
+        qid_user_tag_dict[user] = spe_user_tag_list
+
+    print(qid_user_tag_dict)
+    return embed_tag_list, qid_user_tag_dict
+
+
 def sort_train_user_tag(user_list, train_df):
     train_df['hashtag'] = train_df['hashtag'].apply(get_hashtag)
     train_tag_list = list(set(train_df['hashtag'].explode('hashtag').tolist()))
@@ -99,7 +112,7 @@ def read_embedding(content_df, test_df):
 
     # 读userlist，要灵活调换写与读以保持与其他实验的统一
     '''
-    with open("tData2/userList.txt", "r") as f:
+    with open("wData2/userList.txt", "r") as f:
         x = f.readlines()[0]
         #print(x)
         user_list = get_hashtag(x)
@@ -126,9 +139,9 @@ def read_embedding(content_df, test_df):
     return user_list, content_user_df, tag_list, content_tag_df
 
 
-train_df = pd.read_table('./tData2/train.csv')
-test_df = pd.read_table('./tData2/test.csv')
-valid_df = pd.read_table('./tData2/validation.csv')
+train_df = pd.read_table('./wData2/train.csv')
+test_df = pd.read_table('./wData2/test.csv')
+valid_df = pd.read_table('./wData2/validation.csv')
 
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 
@@ -139,10 +152,10 @@ train_df['content'] = train_df['content'].apply(get_str)
 test_df['content'] = test_df['content'].apply(get_str)
 valid_df['content'] = valid_df['content'].apply(get_str)
 
-with open('./tData2/embeddings.json', 'r') as f:
+with open('./wData2/embeddings.json', 'r') as f:
     con_emb_dict = json.load(f)
 
-embedSet = pd.read_table('./tData2/embed.csv')
+embedSet = pd.read_table('./wData2/embed.csv')
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 embedSet['user_id'] = embedSet['user_id'].apply(get_str)
 embedSet['content'] = embedSet['content'].apply(get_str)
@@ -151,6 +164,7 @@ user_list, content_user_df, tag_list, content_tag_df = read_embedding(embedSet, 
 
 tag_arr_dict = average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict)
 
+embed_tag_list, qid_embed_dict = sort_embed_user_tag(user_list, embedSet[embedSet.time < '20200601'])  # trec 20110201
 train_tag_list, qid_train_dict = sort_train_user_tag(user_list, train_df)
 valid_tag_list, qid_valid_dict = sort_valid_user_tag(user_list, valid_df)
 test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
@@ -196,7 +210,7 @@ class LstmMlp(torch.nn.Module):
             feature_train = []
             label_train = []
             # positive samples
-            positive_tag_list = qid_train_dict[self.user_id]
+            positive_tag_list = sorted(list(set(qid_train_dict[self.user_id])-set(qid_embed_dict[self.user_id])))
             for tag in positive_tag_list:
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
@@ -211,7 +225,7 @@ class LstmMlp(torch.nn.Module):
                 trainF.write(Str)
                 '''
             # negative samples
-            temp_tag_list = list(set(train_tag_list)-set(positive_tag_list))
+            temp_tag_list = list(set(train_tag_list) - set(positive_tag_list)-set(qid_embed_dict[self.user_id]))
             negative_tag_list = random.sample(temp_tag_list, 5*len(positive_tag_list))
             for tag in negative_tag_list:
                 tag_arr = tag_arr_dict[tag]
@@ -238,7 +252,7 @@ class LstmMlp(torch.nn.Module):
             feature_valid = []
             label_valid = []
             # positive samples
-            positive_tag_list = qid_valid_dict[self.user_id]
+            positive_tag_list = sorted(list(set(qid_valid_dict[self.user_id])-set(qid_embed_dict[self.user_id])))
             for tag in positive_tag_list:
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
@@ -247,7 +261,7 @@ class LstmMlp(torch.nn.Module):
                 label_valid.append(x)  # positive sample label: 1
 
             # negative samples
-            temp_tag_list = list(set(valid_tag_list) - set(positive_tag_list))
+            temp_tag_list = list(set(valid_tag_list) - set(positive_tag_list)-set(qid_embed_dict[self.user_id]))
             negative_tag_list = random.sample(temp_tag_list, 5 * len(positive_tag_list))
             for tag in negative_tag_list:
                 tag_arr = tag_arr_dict[tag]
@@ -263,16 +277,16 @@ class LstmMlp(torch.nn.Module):
             mlp_label = torch.FloatTensor(label_valid)
 
         if x == "test":
-            testF = open('./tBertLstmMlp/testBertLstmMlp.dat', "a")
+            testF = open('./wBertLstmMlp2/testBertLstmMlp.dat', "a")
             testF.write(f"# query {self.user_num + 1}")
 
-            testF2 = open('./tBertLstmMlp/testBertLstmMlp2.dat', "a")
+            testF2 = open('./wBertLstmMlp2/testBertLstmMlp2.dat', "a")
             testF2.write(f"# query {self.user_num + 1}")
 
             feature_test = []
             label_test = []
             # positive samples
-            positive_tag_list = qid_train_dict[self.user_id]
+            positive_tag_list = sorted(list(set(qid_test_dict[self.user_id])-set(qid_embed_dict[self.user_id])-set(qid_train_dict[self.user_id])))
             for tag in positive_tag_list:
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
@@ -289,7 +303,7 @@ class LstmMlp(torch.nn.Module):
                 testF.write(Str)
 
             # negative samples
-            negative_tag_list = list(set(test_tag_list) - set(positive_tag_list))
+            negative_tag_list = list(set(test_tag_list) - set(positive_tag_list)-set(qid_embed_dict[self.user_id])-set(qid_train_dict[self.user_id]))
             for tag in negative_tag_list:  # negative samples
                 tag_arr = tag_arr_dict[tag]
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
@@ -333,7 +347,7 @@ class LstmMlp(torch.nn.Module):
 
 def all_user():
     user_num = 0
-    for user_id in tqdm(user_list[:149]):
+    for user_id in tqdm(user_list[:100]):
         each_user(user_num, user_id)
         user_num += 1
 
@@ -342,8 +356,8 @@ def each_user(user_num, user_id):
     # model, criterion, optimizer
     model = LstmMlp(user_num, user_id, 768, 30)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.7)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
     '''
     model.eval()
@@ -354,7 +368,7 @@ def each_user(user_num, user_id):
     '''
     # train the model
     model.train()
-    epoch = 100
+    epoch = 90
 
     for epoch in range(epoch):
         # train process-----------------------------------
@@ -380,7 +394,7 @@ def each_user(user_num, user_id):
     model.eval()
     label_pred, label_test = model("test")
 
-    preF = open('tBertLstmMlp/preBertLstmMlp.txt', "a")
+    preF = open('wBertLstmMlp2/preBertLstmMlp.txt', "a")
     #preF.write(f"# query {user_num + 1}\n")
     spe_user_pre = label_pred.detach().numpy().tolist()
     for tag_pre in spe_user_pre:
