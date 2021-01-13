@@ -177,6 +177,7 @@ embedSet = pd.read_table('./wData2/embed.csv')
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 embedSet['user_id'] = embedSet['user_id'].apply(get_str)
 embedSet['content'] = embedSet['content'].apply(get_str)
+embedSet['time'] = embedSet['time'].apply(get_str)
 embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
 user_list, content_user_df, tag_list, content_tag_df = read_embedding(embedSet, test_df)
 

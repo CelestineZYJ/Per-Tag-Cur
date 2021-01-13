@@ -160,6 +160,7 @@ embedSet = pd.read_table('./wData2/embed.csv')
 embedSet['user_id'] = embedSet['user_id'].apply(get_str)
 embedSet['content'] = embedSet['content'].apply(get_str)
 embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
+embedSet['time'] = embedSet['time'].apply(get_str)
 user_list, content_user_df, tag_list, content_tag_df = read_embedding(embedSet, test_df)
 
 tag_arr_dict = average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict)
