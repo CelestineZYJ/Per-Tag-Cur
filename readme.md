@@ -4,11 +4,13 @@
 
 - Basic Statistics
 
-| Num | Embed | Train | Test |
-| --- | --- | --- | --- |
-| Weibo | TODO | TODO | TODO |
-| User | TODO | TODO | TODO |
-| Hashtag | TODO | TODO | TODO |
++----------+-----------+-------+-------+------+
+| Quantity | Embedding | Train | Valid | Test |
++----------+-----------+-------+-------+------+
+|  Weibo   |   90572   | 87769 |  1402 | 1401 |
+|   User   |    215    |  215  |  215  | 215  |
+| Hashtag  |   58596   | 56865 |  1539 | 1530 |
++----------+-----------+-------+-------+------+
 
 - Distribution
 
