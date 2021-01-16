@@ -149,8 +149,8 @@ def rank_input_test(weibo, newTagRec, user_list, test_tag_list, user_arr_dict, t
 
 def sort_user_tag(user_list, df):
     tag_list = sorted(
-        list(set(train_df['hashtag'].explode('hashtag').tolist())))
-    qid_user_tag_dict = OrderedDict()
+        list(set(train_df['hashtag'].explode('hashtag').tolist()))) #sorted(list(set())) to keep the fixed order
+    qid_user_tag_dict = OrderedDict() 
     for user in tqdm(user_list, desc="sort_train_user_tag"):
         spe_user_df = df.loc[df['user_id'] == user]
         spe_user_tag_list = sorted(
@@ -160,20 +160,23 @@ def sort_user_tag(user_list, df):
 
 
 def read_embedding(content_df, test_df, weibo):
-    # 读userlist
+    #read and parse user list
     if(weibo):
         with open("/home/zyb/perTagRec/weibo/partData/userList.txt", "r", encoding="utf-8") as f:
             user_list = ast.literal_eval(f.readline().strip())[:100]
     else:
         with open("/home/zyb/perTagRec/twitter/userList.txt", "r", encoding="utf-8") as f:
             user_list = ast.literal_eval(f.readline().strip())[:150]
-
+    
+    # user1 [con1, con2, con3, ...]
     content_user_df = content_df.groupby(['user_id'], as_index=False).agg({
         'content': lambda x: list(x)})
-
+   
+    # tag1 [con1, con2, con3, ...] 
     content_tag_df = content_df.explode('hashtag').groupby(
         ['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
-
+    
+    #all tags
     tag_list = sorted(
         list(set(content_df['hashtag'].explode('hashtag').tolist())))
 
@@ -183,9 +186,14 @@ def read_embedding(content_df, test_df, weibo):
 
 
 if __name__ == '__main__':
+    '''
+    python bert.py --weibo --newTagRec
+    --weibo choose weibo (default: 1)
+    --newTagRec run new Hashtag Recommendation (default: 1)
+    '''
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weibo", default=True, action='store_true')
-    parser.add_argument("--newTagRec", default=True, action='store_true')
+    parser.add_argument("--weibo", default=1, type=int)
+    parser.add_argument("--newTagRec", default=1, type=int)
     args = parser.parse_args()
 
     if(args.weibo == True):
@@ -203,9 +211,11 @@ if __name__ == '__main__':
     test_df = pd.read_csv(test_path, delimiter='\t', encoding="utf-8")
     embed_df = pd.read_csv(embed_path, delimiter='\t', encoding="utf-8")
 
+    #read content embedding json, get from pretrainBert.py
     with open(embed_json, 'r', encoding="utf-8") as f:
-        con_emb_dict = json.load(f)
+        con_emb_dict = json.load(f) 
 
+    #format: user_id,content -->str ; hashtag -->list  
     train_df['user_id'] = train_df['user_id'].apply(str)
     train_df['content'] = train_df['content'].apply(str)
     train_df['hashtag'] = train_df['hashtag'].apply(ast.literal_eval)
