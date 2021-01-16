@@ -2,19 +2,19 @@
 ## Data
 ### Weibo
 - Basic Statistics
-|  | Embed | Train | Test |
+| Num | Embed | Train | Test |
 | --- | --- | --- | --- |
-| Weibo | | | |
-| User | | | 
-| Hashtag | | | |
+| Weibo | TODO | TODO | TODO |
+| User | TODO | TODO | TODO |
+| Hashtag | TODO | TODO | TODO |
 - Distribution
 ### Twitter
 - Basic Statistics
-|  | Embed | Train | Test |
+| Num | Embed | Train | Test |
 | --- | --- | --- | --- |
-| Twitter | | | |
-| User | | | 
-| Hashtag | | | |
+| Tweet | TODO | TODO | TODO |
+| User | TODO | TODO | TODO |
+| Hashtag | TODO | TODO | TODO |
 - Distribution
 ---
 ## Model
