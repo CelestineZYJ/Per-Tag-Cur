@@ -149,7 +149,7 @@ def rank_input_test(weibo, newTagRec, user_list, test_tag_list, user_arr_dict, t
 
 def sort_user_tag(user_list, df):
     tag_list = sorted(
-        list(set(train_df['hashtag'].explode('hashtag').tolist()))) #sorted(list(set())) to keep the fixed order
+        list(set(df['hashtag'].explode('hashtag').tolist()))) #sorted(list(set())) to keep the fixed order
     qid_user_tag_dict = OrderedDict() 
     for user in tqdm(user_list, desc="sort_train_user_tag"):
         spe_user_df = df.loc[df['user_id'] == user]
