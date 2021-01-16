@@ -39,7 +39,7 @@
 
 > test: java -jar RankLib-2.14.jar -load modelBertGbdt.dat -test testBert.dat -metric2T MAP@5 -idv BertGbdt.MAP@5.txt 
 
-** Description **:
+** Description ** :
 
 1. train.dat & test.dat example
 #query user_index
