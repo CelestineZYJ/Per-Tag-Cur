@@ -9,6 +9,10 @@ import re
 from tqdm import tqdm
 
 
+modelPath = 'demoLstm'
+dataPath = 'demo'
+
+
 def get_hashtag(content):
     hashtag = re.findall(r"['\'](.*?)['\']", str(content))
     return hashtag
@@ -112,7 +116,7 @@ def read_embedding(content_df, test_df):
 
     # 读userlist，要灵活调换写与读以保持与其他实验的统一
     '''
-    with open("wData2/userList.txt", "r") as f:
+    with open(dataPath+"/userList.txt", "r") as f:
         x = f.readlines()[0]
         #print(x)
         user_list = get_hashtag(x)
@@ -139,9 +143,9 @@ def read_embedding(content_df, test_df):
     return user_list, content_user_df, tag_list, content_tag_df
 
 
-train_df = pd.read_table('./wData2/train.csv')
-test_df = pd.read_table('./wData2/test.csv')
-valid_df = pd.read_table('./wData2/validation.csv')
+train_df = pd.read_table('./'+dataPath+'/train.csv')
+test_df = pd.read_table('./'+dataPath+'/test.csv')
+valid_df = pd.read_table('./'+dataPath+'/validation.csv')
 
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 
@@ -152,10 +156,10 @@ train_df['content'] = train_df['content'].apply(get_str)
 test_df['content'] = test_df['content'].apply(get_str)
 valid_df['content'] = valid_df['content'].apply(get_str)
 
-with open('./wData2/embeddings.json', 'r') as f:
+with open('./'+dataPath+'/embeddings.json', 'r') as f:
     con_emb_dict = json.load(f)
 
-embedSet = pd.read_table('./wData2/embed.csv')
+embedSet = pd.read_table('./'+dataPath+'/embed.csv')
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 embedSet['user_id'] = embedSet['user_id'].apply(get_str)
 embedSet['content'] = embedSet['content'].apply(get_str)
@@ -278,10 +282,10 @@ class LstmMlp(torch.nn.Module):
             mlp_label = torch.FloatTensor(label_valid)
 
         if x == "test":
-            testF = open('./wBertLstmMlp2/testBertLstmMlp.dat', "a")
+            testF = open('./'+modelPath+'/testBertLstmMlp.dat', "a")
             testF.write(f"# query {self.user_num + 1}")
 
-            testF2 = open('./wBertLstmMlp2/testBertLstmMlp2.dat', "a")
+            testF2 = open('./'+modelPath+'/testBertLstmMlp2.dat', "a")
             testF2.write(f"# query {self.user_num + 1}")
 
             feature_test = []
@@ -349,7 +353,10 @@ class LstmMlp(torch.nn.Module):
 def all_user():
     user_num = 0
     for user_id in tqdm(user_list[:100]):
-        each_user(user_num, user_id)
+        try:
+            each_user(user_num, user_id)
+        except:
+            continue
         user_num += 1
 
 
@@ -357,7 +364,7 @@ def each_user(user_num, user_id):
     # model, criterion, optimizer
     model = LstmMlp(user_num, user_id, 768, 30)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.22)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
     '''
@@ -395,7 +402,7 @@ def each_user(user_num, user_id):
     model.eval()
     label_pred, label_test = model("test")
 
-    preF = open('wBertLstmMlp2/preBertLstmMlp.txt', "a")
+    preF = open(modelPath+'/preBertLstmMlp.txt', "a")
     #preF.write(f"# query {user_num + 1}\n")
     spe_user_pre = label_pred.detach().numpy().tolist()
     for tag_pre in spe_user_pre:
