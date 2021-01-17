@@ -9,8 +9,8 @@ import re
 from tqdm import tqdm
 
 
-modelPath = 'tBertMlp'
-dataPath = 'tData2'
+modelPath = 'demoMlp'
+dataPath = 'demo'
 
 
 def get_hashtag(content):
@@ -140,30 +140,23 @@ def read_embedding(embed_df, train_df):
         user_list = get_hashtag(x)
         #print(user_list)
 
-    content_user_df = train_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
-    content_tag_df = embed_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
-    tag_list = list(set(content_tag_df['hashtag'].tolist()))
+    train_content_user_df = train_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
+    train_content_tag_df = train_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
 
-    '''
-    train_df = pd.read_table('./data/trainSet.csv')
-    train_df['hashtag'] = train_df['hashtag'].apply(get_hashtag)
-    train_tag_list = list(set(train_df['hashtag'].explode('hashtag').tolist()))
-    print(train_tag_list)
-    print(tag_list)
+    train_tag_list = list(set(train_content_tag_df['hashtag'].tolist()))
 
-
-    for tag in train_tag_list:
-        if tag not in tag_list:
-            print(tag)
-    '''
     print("user_num: " + str(len(user_list)))
-    print("tag_num: " + str(len(tag_list)))
-    return user_list, content_user_df, tag_list, content_tag_df
+    print("train_tag_num: " + str(len(train_tag_list)))
+    return user_list, train_content_user_df, train_content_tag_df
 
+
+with open('./'+dataPath+'/embeddings.json', 'r') as f:
+    con_emb_dict = json.load(f)
 
 train_df = pd.read_table('./'+dataPath+'/train.csv')
 test_df = pd.read_table('./'+dataPath+'/test.csv')
 valid_df = pd.read_table('./'+dataPath+'/validation.csv')
+embedSet = pd.read_table('./'+dataPath+'/embed.csv')
 
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 
@@ -174,24 +167,20 @@ train_df['content'] = train_df['content'].apply(get_str)
 test_df['content'] = test_df['content'].apply(get_str)
 valid_df['content'] = valid_df['content'].apply(get_str)
 
-with open('./'+dataPath+'/embeddings.json', 'r') as f:
-    con_emb_dict = json.load(f)
-
-embedSet = pd.read_table('./'+dataPath+'/embed.csv')
-# 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 embedSet['user_id'] = embedSet['user_id'].apply(get_str)
 embedSet['content'] = embedSet['content'].apply(get_str)
 embedSet['time'] = embedSet['time'].apply(get_str)
 embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
-user_list, content_user_df, tag_list, content_tag_df = read_embedding(embedSet, test_df)
 
-user_arr_dict = average_user_tweet(user_list, content_user_df, con_emb_dict)
-tag_arr_dict = average_hashtag_tweet(tag_list, content_tag_df, con_emb_dict)
+user_list, train_content_user_df, train_content_tag_df = read_embedding(embedSet, train_df)
 
 embed_tag_list, qid_embed_dict = sort_embed_user_tag(user_list, embedSet.loc[embedSet['time'] < '20200601'])  # trec 20110201
 train_tag_list, qid_train_dict = sort_train_user_tag(user_list, train_df)
 valid_tag_list, qid_valid_dict = sort_valid_user_tag(user_list, valid_df)
 test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
+
+train_user_arr_dict = average_user_tweet(user_list, train_content_user_df, con_emb_dict)
+train_tag_arr_dict = average_hashtag_tweet(train_tag_list, train_content_tag_df, con_emb_dict)
 
 
 class Feedforward(torch.nn.Module):
@@ -215,7 +204,7 @@ class Feedforward(torch.nn.Module):
 def all_user(user_list):
     user_num = 0
     for user_id in tqdm(user_list[:150]):
-        user_arr = user_arr_dict[user_id]  # type nparr
+        user_arr = train_user_arr_dict[user_id]  # type nparr
 
         # train
         feature_train = []
@@ -224,7 +213,7 @@ def all_user(user_list):
         positive_tag_list = sorted(list(set(qid_train_dict[user_id])-set(qid_embed_dict[user_id])))
 
         for tag in positive_tag_list:
-            tag_arr = tag_arr_dict[tag]
+            tag_arr = train_tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             feature_train.append(user_tag_arr)
             x = 1
@@ -234,7 +223,7 @@ def all_user(user_list):
         temp_tag_list = list(set(train_tag_list) - set(positive_tag_list)-set(qid_embed_dict[user_id]))
         negative_tag_list = random.sample(temp_tag_list, 5 * len(positive_tag_list))
         for tag in negative_tag_list:
-            tag_arr = tag_arr_dict[tag]
+            tag_arr = train_tag_arr_dict[tag]
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             feature_train.append(user_tag_arr)
             x = 0
@@ -253,14 +242,20 @@ def all_user(user_list):
         positive_tag_list = sorted(list(set(qid_valid_dict[user_id])-set(qid_embed_dict[user_id])))
         #if len(positive_tag_list) == 0:
             #continue
-        '''
-        if user_num == 8:
-            print(qid_valid_dict[user_id])
-            print(qid_embed_dict[user_id])
-            print(positive_tag_list)
-        '''
+        
         for tag in positive_tag_list:
-            tag_arr = tag_arr_dict[tag]
+            # cal tag_arr by hashtag embedding
+            embed_list = []
+            content_list = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of train part
+            spe_valid_df = valid_df.loc[(valid_df['user_id'] != user_id)]
+            spe_valid_content_tag_df = spe_valid_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
+            content_list += spe_valid_content_tag_df['content'].loc[(spe_valid_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of valid part
+            if len(content_list) == 0:
+                continue
+            for content in content_list:
+                embed_list.append(content_embedding(content, con_emb_dict))
+            tag_arr = np.mean(np.array(embed_list), axis=0)
+
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             feature_valid.append(user_tag_arr)
             x = 1
@@ -269,16 +264,20 @@ def all_user(user_list):
         # negative samples list(set(valid_tag_list) - set(positive_tag_list)) #
         temp_tag_list = list(set(valid_tag_list) - set(positive_tag_list)-set(qid_embed_dict[user_id]))
         negative_tag_list = random.sample(temp_tag_list, 5 * len(positive_tag_list))
-        '''
-        if user_num == 8:
-            print('\n')
-            print(valid_tag_list)
-            print(positive_tag_list)
-            print(qid_embed_dict[user_id])
-            print(negative_tag_list)
-        '''
+       
         for tag in negative_tag_list:
-            tag_arr = tag_arr_dict[tag]
+            # cal tag_arr by hashtag embedding
+            embed_list = []
+            content_list = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of train part
+            spe_valid_df = valid_df.loc[(valid_df['user_id'] != user_id)]
+            spe_valid_content_tag_df = spe_valid_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
+            content_list += spe_valid_content_tag_df['content'].loc[(spe_valid_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of valid part
+            if len(content_list) == 0:
+                continue
+            for content in content_list:
+                embed_list.append(content_embedding(content, con_emb_dict))
+            tag_arr = np.mean(np.array(embed_list), axis=0)
+
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             feature_valid.append(user_tag_arr)
             x = 0
@@ -302,7 +301,18 @@ def all_user(user_list):
         # positive samples qid_test_dict[user_id] #
         positive_tag_list = sorted(list(set(qid_test_dict[user_id])-set(qid_embed_dict[user_id])-set(qid_train_dict[user_id])))
         for tag in positive_tag_list:
-            tag_arr = tag_arr_dict[tag]
+            # cal tag_arr by hashtag embedding
+            embed_list = []
+            content_list = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of train part
+            spe_test_df = test_df.loc[(test_df['user_id'] != user_id)]
+            spe_test_content_tag_df = spe_test_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
+            content_list += spe_test_content_tag_df['content'].loc[(spe_test_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of test part
+            if len(content_list) == 0:
+                continue
+            for content in content_list:
+                embed_list.append(content_embedding(content, con_emb_dict))
+            tag_arr = np.mean(np.array(embed_list), axis=0)
+
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             feature_test.append(user_tag_arr)
             x = 1
@@ -318,7 +328,18 @@ def all_user(user_list):
         # negative samples list(set(test_tag_list) - set(positive_tag_list))#
         negative_tag_list = list(set(test_tag_list) - set(positive_tag_list)-set(qid_embed_dict[user_id])-set(qid_train_dict[user_id]))
         for tag in negative_tag_list:  # negative samples
-            tag_arr = tag_arr_dict[tag]
+            # cal tag_arr by hashtag embedding
+            embed_list = []
+            content_list = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of train part
+            spe_test_df = test_df.loc[(test_df['user_id'] != user_id)]
+            spe_test_content_tag_df = spe_test_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
+            content_list += spe_test_content_tag_df['content'].loc[(spe_test_content_tag_df['hashtag']) == tag].tolist()[0]  # tag list of test part
+            if len(content_list) == 0:
+                continue
+            for content in content_list:
+                embed_list.append(content_embedding(content, con_emb_dict))
+            tag_arr = np.mean(np.array(embed_list), axis=0)
+
             user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
             feature_test.append(user_tag_arr)
             x = 0
