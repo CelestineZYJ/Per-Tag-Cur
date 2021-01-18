@@ -10,7 +10,7 @@ import re
 from tqdm import tqdm
 
 
-modelPath = 'demoLstm'
+modelPath = 'demoLstmAtt'
 dataPath = 'demo'
 
 
@@ -124,7 +124,7 @@ def read_embedding(train_df):
         x = f.readlines()[0]
         #print(x)
         user_list = get_hashtag(x)
-        print(user_list)
+        #print(user_list)
 
     train_content_user_df = train_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
     train_content_tag_df = train_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
@@ -508,7 +508,7 @@ def each_user(user_num, user_id):
     '''
     # train the model
     model.train()
-    epoch = 10
+    epoch = 30
 
     for epoch in range(epoch):
         # train process-----------------------------------
@@ -519,6 +519,7 @@ def each_user(user_num, user_id):
 
         # compute loss
         loss = criterion(label_pred.squeeze(), label_train)
+        print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
         # backward pass
         loss.backward()
