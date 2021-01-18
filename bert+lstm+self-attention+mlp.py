@@ -190,21 +190,24 @@ class MultiheadSelfAttention(nn.Module):
 
     def forward(self, x):
         # x: (Time, Batch_Size, Channel)
+        x = torch.unsqueeze(x, 1)
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
         attn_output, _ = self.attention(q, k, v)
+        attn_output = torch.squeeze(attn_output, 1)
         return attn_output  # (Time, Batch_Size, embed_dim)
 
 
 class LstmMlp(torch.nn.Module):
-    def __init__(self, user_num, user_id, input_size, hidden_size):
+    def __init__(self, user_num, user_id, input_size, att_size, hidden_size):
         super(LstmMlp, self).__init__()
         self.input_size = input_size
+        self.att_size = att_size
         self.hidden_size = hidden_size
         self.user_num = user_num
         self.user_id = user_id
-        self.fc1 = torch.nn.Linear(self.input_size*2, self.hidden_size)
+        self.fc1 = torch.nn.Linear(self.input_size+self.att_size, self.hidden_size)
         self.relu = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
@@ -244,12 +247,12 @@ class LstmMlp(torch.nn.Module):
                 content_list = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()[0]
                 for content in content_list:
                     att_input.append(content_embedding(content, con_emb_dict))
-                att_input = torch.FloatTensor(att_input)
-                attention = MultiheadSelfAttention(input_dim=768, embed_dim=100)
-                att_output = attention(att_input)
-                print(att_output)
-                print(att_output.size())
-                #这里是为了通过att_output编程tag_arr完成hashtag modeling
+                att_input = torch.FloatTensor(np.array(att_input))
+                attention = MultiheadSelfAttention(input_dim=self.input_size, embed_dim=self.att_size)
+                att_output = attention(att_input).unsqueeze(0).unsqueeze(0)
+                maxpool = torch.nn.MaxPool2d(kernel_size=(len(content_list), 1))
+                att_output = maxpool(att_output)
+                tag_arr = att_output.squeeze(0).squeeze(0).squeeze(0).detach().numpy()
 
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_train.append(user_tag_arr)
@@ -271,11 +274,12 @@ class LstmMlp(torch.nn.Module):
                 content_list = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()[0]
                 for content in content_list:
                     att_input.append(content_embedding(content, con_emb_dict))
-                att_input = torch.FloatTensor(att_input)
-                attention = MultiheadSelfAttention(input_dim=768, embed_dim=100)
-                att_output = attention(att_input)
-                # 这里是为了通过att_output编程tag_arr完成hashtag modeling
-
+                att_input = torch.FloatTensor(np.array(att_input))
+                attention = MultiheadSelfAttention(input_dim=self.input_size, embed_dim=self.att_size)
+                att_output = attention(att_input).unsqueeze(0).unsqueeze(0)
+                maxpool = torch.nn.MaxPool2d(kernel_size=(len(content_list), 1))
+                att_output = maxpool(att_output)
+                tag_arr = att_output.squeeze(0).squeeze(0).squeeze(0).detach().numpy()
 
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_train.append(user_tag_arr)
@@ -369,7 +373,6 @@ class LstmMlp(torch.nn.Module):
             positive_tag_list = sorted(list(set(qid_test_dict[self.user_id])-set(qid_train_dict[self.user_id])))
             for tag in positive_tag_list:
                 # cal tag_arr by hashtag embedding
-                embed_list = []
                 content_list = []
                 x = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()
                 if len(x) != 0:
@@ -382,14 +385,15 @@ class LstmMlp(torch.nn.Module):
                 if len(content_list) == 0:
                     print("test positive")
                     continue
+                att_input = []
                 for content in content_list:
-                    embed_list.append(content_embedding(content, con_emb_dict))
-
-                att_input = torch.FloatTensor(embed_list)
-                attention = MultiheadSelfAttention(input_dim=768, embed_dim=100)
-                att_output = attention(att_input)
-                # 这里是为了通过att_output编程tag_arr完成hashtag modeling
-
+                    att_input.append(content_embedding(content, con_emb_dict))
+                att_input = torch.FloatTensor(np.array(att_input))
+                attention = MultiheadSelfAttention(input_dim=self.input_size, embed_dim=self.att_size)
+                att_output = attention(att_input).unsqueeze(0).unsqueeze(0)
+                maxpool = torch.nn.MaxPool2d(kernel_size=(len(content_list), 1))
+                att_output = maxpool(att_output)
+                tag_arr = att_output.squeeze(0).squeeze(0).squeeze(0).detach().numpy()
 
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_test.append(user_tag_arr)
@@ -408,7 +412,6 @@ class LstmMlp(torch.nn.Module):
             negative_tag_list = list(set(test_tag_list) - set(positive_tag_list)-set(qid_train_dict[self.user_id]))
             for tag in negative_tag_list:  # negative samples
                 # cal tag_arr by hashtag embedding
-                embed_list = []
                 content_list = []
                 x = train_content_tag_df['content'].loc[(train_content_tag_df['hashtag']) == tag].tolist()
                 if len(x) != 0:
@@ -422,14 +425,15 @@ class LstmMlp(torch.nn.Module):
                 if len(content_list) == 0:
                     print("test positive")
                     continue
+                att_input = []
                 for content in content_list:
-                    embed_list.append(content_embedding(content, con_emb_dict))
-
-                att_input = torch.FloatTensor(embed_list)
-                attention = MultiheadSelfAttention(input_dim=768, embed_dim=100)
-                att_output = attention(att_input)
-                # 这里是为了通过att_output编程tag_arr完成hashtag modeling
-
+                    att_input.append(content_embedding(content, con_emb_dict))
+                att_input = torch.FloatTensor(np.array(att_input))
+                attention = MultiheadSelfAttention(input_dim=self.input_size, embed_dim=self.att_size)
+                att_output = attention(att_input).unsqueeze(0).unsqueeze(0)
+                maxpool = torch.nn.MaxPool2d(kernel_size=(len(content_list), 1))
+                att_output = maxpool(att_output)
+                tag_arr = att_output.squeeze(0).squeeze(0).squeeze(0).detach().numpy()
 
                 user_tag_arr = np.concatenate((user_arr, tag_arr), axis=None)
                 feature_test.append(user_tag_arr)
@@ -479,7 +483,7 @@ def all_user():
 
 def each_user(user_num, user_id):
     # model, criterion, optimizer
-    model = LstmMlp(user_num, user_id, 768, 30)
+    model = LstmMlp(user_num, user_id, 768, 100, 30)
     criterion = torch.nn.BCELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.22)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
