@@ -201,7 +201,7 @@ test_file = './demo2/test.csv'
 def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     #valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=vaid_file, test_file=test_file, dict=text_emb_dict)
-    #test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
+    test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
     # model, criterion, optimizer
     model = Mlp(768, 30)
@@ -237,13 +237,26 @@ def cal_all_pair():
             # backward pass
             loss.backward()
             optimizer.step()
+
             '''
             # validate process----------------------------------
+            valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
             optimizer.zero_grad()
-            label_pred = model(feature_valid)
-            val_loss = criterion(label_pred.squeeze(), label_valid)
+            pred_label = model(valid_user_feature, valid_hashtag_feature)
+            val_loss = criterion(pred_label.squeeze(), valid_label)
             scheduler.step(val_loss)
             '''
+    # evaluation
+    model.eval()
+    for i in range(len(test_dataset)):
+        test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+        pred_label = model(test_user_feature, test_hashtag_feature)
+        print(pred_label.squeeze())
+        print(test_label)
+        after_train = criterion(pred_label.squeeze(), test_label)
+        print("Pair " + str(i) + ": ")
+        print("test loss after train", after_train.item())
+
 
 cal_all_pair()
 
