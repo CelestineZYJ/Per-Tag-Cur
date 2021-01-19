@@ -4,6 +4,7 @@ import re
 import json
 import torch
 import numpy as np
+from tqdm import tqdm
 
 
 class Mlp(torch.nn.Module):
@@ -102,8 +103,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                 hashtag_feature.append(self.dict[text])
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
-
-        return user_feature, hashtag_feature, torch.FloatTensor(self.label[idx])
+        return user_feature, hashtag_feature, torch.FloatTensor([self.label[idx]])
 
     def __len__(self):
         return len(self.label)
@@ -214,7 +214,8 @@ def cal_all_pair():
     epoch = 10
 
     for epoch in range(epoch):
-        for i in range(len(train_dataset)):
+        print(epoch)
+        for i in tqdm(range(len(train_dataset))):
             train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
 
             # train process-----------------------------------
@@ -223,13 +224,16 @@ def cal_all_pair():
             # forward pass
             try:
                 pred_label = model(train_user_feature, train_hashtag_feature)
-                print(pred_label)
+                # print(pred_label)
             except:
                 continue
 
             # compute loss
-            print(train_label)
-            loss = criterion(pred_label.squeeze(), train_label)
+            # print(train_label)
+            try:
+                loss = criterion(pred_label, train_label)
+            except:
+                tt = 1
 
             #print("Pair "+str(i)+": ")
             #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
