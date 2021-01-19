@@ -5,6 +5,8 @@ import json
 import torch
 import numpy as np
 from tqdm import tqdm
+print(torch.cuda.is_available())
+print(print(torch.__version__))
 
 
 class Mlp(torch.nn.Module):
@@ -263,8 +265,6 @@ def cal_all_pair():
 
 
 cal_all_pair()
-
-
 
 
 
