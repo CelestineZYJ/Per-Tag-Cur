@@ -1,4 +1,5 @@
 # This script is a pytorch dataset returning output after feature engineering
+#  -*- coding: utf-8 -*-
 import re
 import json
 import torch
@@ -15,7 +16,13 @@ class Mlp(torch.nn.Module):
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, user_feature, hashtag_feature):
+        # user modeling
+        user_modeling = torch.mean(user_feature, 0)
+        # hashtag modeling
+        hashtag_modeling = torch.mean(hashtag_feature, 0)
+        x = torch.cat((user_modeling, hashtag_modeling), 0)
+        #print(x)
         hidden = self.fc1(x)
         relu = self.relu(hidden)
         output = self.fc2(relu)
@@ -81,18 +88,22 @@ class ScratchDataset(torch.utils.data.Dataset):
         # hashtag modeling(train embedding+test others' embedding)
         if self.data_split == 'Train':
             for text in self.train_text_per_hashtag[hashtag]:
-                hashtag_feature.append(self.dict[text])
-            user_feature = torch.cat(user_feature, dim=0)
-            hashtag_feature = torch.cat(hashtag_feature, dim=0)
+                try:
+                    hashtag_feature.append(self.dict[text])
+                except:
+                    #print("found no: "+text)
+                    continue
+            user_feature = torch.FloatTensor(user_feature)
+            hashtag_feature = torch.FloatTensor(hashtag_feature)
         if self.data_split == 'Test':
             for text in self.train_text_per_hashtag[hashtag]:
                 hashtag_feature.append(self.dict[text])
             for text in (self.test_text_per_hashtag[hashtag]-self.test_text_per_user[user]):
                 hashtag_feature.append(self.dict[text])
-            user_feature = torch.cat(user_feature, dim=0)
-            hashtag_feature = torch.cat(hashtag_feature, dim=0)
+            user_feature = torch.FloatTensor(user_feature)
+            hashtag_feature = torch.FloatTensor(hashtag_feature)
 
-        return user_feature, hashtag_feature, torch.tensor(self.label[idx])
+        return user_feature, hashtag_feature, torch.FloatTensor(self.label[idx])
 
     def __len__(self):
         return len(self.label)
@@ -100,7 +111,7 @@ class ScratchDataset(torch.utils.data.Dataset):
     # cal user modeling and hashtag modeling
     def process_data_file(self):
         if self.data_split == 'Train':
-            trainF = open(self.train_file)
+            trainF = open(self.train_file, encoding='utf-8')
             for line in trainF:
                 l = line.strip('\n').split('\t')
                 text, user, hashtags = l[0], l[1], l[2:]
@@ -115,8 +126,8 @@ class ScratchDataset(torch.utils.data.Dataset):
             f.close()
 
         if self.data_split == 'Test':
-            trainF = open(self.train_file)
-            testF = open(self.test_file)
+            trainF = open(self.train_file, encoding='utf-8')
+            testF = open(self.test_file, encoding='utf-8')
             for line in trainF:
                 l = line.strip('\n').split('\t')
                 text, user, hashtags = l[0], l[1], l[2:]
@@ -177,7 +188,7 @@ class ScratchDataset(torch.utils.data.Dataset):
 with open('./demo2/embeddings.json', 'r') as f:
     text_emb_dict = json.load(f)
 
-with open("demo2/userList.txt", "r") as f:
+with open("demo2/userList.csv", "r") as f:
     x = f.readlines()[0]
     user_list = re.findall(r"['\'](.*?)['\']", str(x))
 
@@ -190,7 +201,7 @@ test_file = './demo2/test.csv'
 def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     #valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=vaid_file, test_file=test_file, dict=text_emb_dict)
-    test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
+    #test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
     # model, criterion, optimizer
     model = Mlp(768, 30)
@@ -205,16 +216,23 @@ def cal_all_pair():
     for epoch in range(epoch):
         for i in range(len(train_dataset)):
             train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
-            train_feature = np.concatenate(train_user_feature, train_hashtag_feature, axis=0)
 
             # train process-----------------------------------
             optimizer.zero_grad()
 
             # forward pass
-            label_pred = model(train_feature)
+            try:
+                pred_label = model(train_user_feature, train_hashtag_feature)
+                print(pred_label)
+            except:
+                continue
 
             # compute loss
-            loss = criterion(label_pred.squeeze(), train_label)
+            print(train_label)
+            loss = criterion(pred_label.squeeze(), train_label)
+
+            #print("Pair "+str(i)+": ")
+            #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
             # backward pass
             loss.backward()
@@ -226,6 +244,8 @@ def cal_all_pair():
             val_loss = criterion(label_pred.squeeze(), label_valid)
             scheduler.step(val_loss)
             '''
+
+cal_all_pair()
 
 
 
