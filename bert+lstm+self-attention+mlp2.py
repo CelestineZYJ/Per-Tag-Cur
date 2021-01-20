@@ -9,22 +9,71 @@ from tqdm import tqdm
 #print(print(torch.__version__))
 
 
+class MultiheadSelfAttention(torch.nn.Module):
+    """
+    Multi-headed self attention
+    """
+    def __init__(
+            self,
+            input_dim,
+            embed_dim,  # q,k,v have the same dimension here
+            num_heads=1,  # By default, we use single head
+                 ):
+        super().__init__()
+        self.q_proj = torch.nn.Linear(input_dim, embed_dim)
+        self.k_proj = torch.nn.Linear(input_dim, embed_dim)
+        self.v_proj = torch.nn.Linear(input_dim, embed_dim)
+        self.attention = torch.nn.MultiheadAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+        )
+
+    def forward(self, x):
+        # x: (Time, Batch_Size, Channel)
+        x = torch.unsqueeze(x, 1)
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+        attn_output, _ = self.attention(q, k, v)
+        attn_output = torch.squeeze(attn_output, 1)
+        maxpool = torch.nn.MaxPool2d(kernel_size=(len(attn_output), 1))
+        attn_output = maxpool(attn_output)
+        return attn_output  # (Time, Batch_Size, embed_dim)
+
+
+class Lstm(torch.nn.Module):
+    def __init__(self, input_size, output_size):
+        super(Lstm, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.lstm = torch.nn.LSTM(self.input_size, self.output_size)
+
+    def forward(self, user_feature):
+        lstm_output, lstm_hidden = self.lstm(user_feature[0])
+        for i in user_feature:
+            lstm_output, lstm_hidden = self.lstm(i, lstm_hidden)
+        user_modeling = lstm_output
+        return user_modeling
+
+
 class Mlp(torch.nn.Module):
-    def __init__(self, input_size, hidden_size):
+    def __init__(self, input_size, hidden_size, embed_size):
         super(Mlp, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.embed_size = embed_size
         self.fc1 = torch.nn.Linear(self.input_size*2, self.hidden_size)
         self.relu = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
+        self.lstm = Lstm(self.input_size, self.input_size)
+        self.attention = MultiheadSelfAttention(self.input_size, self.embed_size)
 
     def forward(self, user_feature, hashtag_feature):
-        # user modeling
-        user_modeling = torch.mean(user_feature, 0)
-        # hashtag modeling
-        hashtag_modeling = torch.mean(hashtag_feature, 0)
+        user_modeling = self.lstm(user_feature)
+        hashtag_modeling = self.attention(hashtag_feature)
         x = torch.cat((user_modeling, hashtag_modeling), 0)
+        #print(x)
         hidden = self.fc1(x)
         relu = self.relu(hidden)
         output = self.fc2(relu)
@@ -218,7 +267,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag2))
                     self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./tBertMlp/testBertMlp.dat', "a")
+            labelF = open('./tBertLstmMlp/testBertLstmMlp.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -255,17 +304,21 @@ def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
+    print(len(train_dataset))
+    print(len(valid_dataset))
+    print(len(test_dataset))
+
 
     # model, criterion, optimizer
-    model = Mlp(768, 30)
+    model = Mlp(768, 30, 100)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.0005)  # , momentum=0.9)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
-    '''
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)  # , momentum=0.9)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
+
     # train the model
     model.train()
-    epoch = 1
-    
+    epoch = 10
+
     for epoch in range(epoch):
         for i in tqdm(range(len(train_dataset))):
             train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
@@ -275,19 +328,19 @@ def cal_all_pair():
 
             # forward pass
             pred_label = model(train_user_feature, train_hashtag_feature)
-            print(pred_label)
+            #print(pred_label)
 
             # compute loss
-            print(train_label)
+            #print(train_label)
             loss = criterion(pred_label, train_label)
 
-            print("Epoch {}: train loss: {}".format(epoch, loss.item()))
+            #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
             # backward pass
             loss.backward()
             optimizer.step()
 
-            
+            #'''
             # validate process----------------------------------
             try:
                 valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
@@ -297,23 +350,23 @@ def cal_all_pair():
                 scheduler.step(val_loss)
             except:
                 pass
-    '''
+            #'''
 
     # evaluation
     model.eval()
-    preF = open('./tBertMlp/preBertMlp.txt', "a")
+    preF = open('./tBertLstmMlp/preBertLstmMlp.txt', "a")
     for i in tqdm(range(len(test_dataset))):
-        test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
-        pred_label = model(test_user_feature, test_hashtag_feature)
-        print(pred_label.detach().numpy.tolist()[0])
-        print(test_label)
-        preF.write(f"{pred_label.detach().numpy.tolist()[0]}\n")
-        after_train = criterion(pred_label, test_label)
-        print("test loss after train", after_train.item())
+        try:
+            test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+            pred_label = model(test_user_feature, test_hashtag_feature)
+            print(pred_label)
+            print(test_label)
+            preF.write(f"{pred_label.detach().numpy.tolist()[0]}\n")
+            after_train = criterion(pred_label, test_label)
+            print("test loss after train", after_train.item())
+        except:
+            continue
     preF.close()
 
 
 cal_all_pair()
-
-
-
