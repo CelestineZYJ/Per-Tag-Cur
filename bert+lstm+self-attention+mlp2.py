@@ -356,16 +356,16 @@ def cal_all_pair():
     model.eval()
     preF = open('./tBertLstmMlp/preBertLstmMlp.txt', "a")
     for i in tqdm(range(len(test_dataset))):
+        test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
         try:
-            test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
             pred_label = model(test_user_feature, test_hashtag_feature)
-            print(pred_label)
-            print(test_label)
-            preF.write(f"{pred_label.detach().numpy.tolist()[0]}\n")
-            after_train = criterion(pred_label, test_label)
-            print("test loss after train", after_train.item())
         except:
             continue
+        print(pred_label)
+        print(test_label)
+        preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
+        after_train = criterion(pred_label, test_label)
+        print("test loss after train", after_train.item())
     preF.close()
 
 

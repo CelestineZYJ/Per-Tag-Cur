@@ -99,7 +99,7 @@ class ScratchDataset(torch.utils.data.Dataset):
             except:
                 pass
 
-            for text in list((set(self.valid_text_per_hashtag[hashtag])-set(self.valid_text_per_user[user]))):
+            for text in list(set(self.valid_text_per_hashtag[hashtag])-set(self.valid_text_per_user[user])):
                 hashtag_feature.append(self.dict[text])
 
             user_feature = torch.FloatTensor(user_feature)
@@ -109,7 +109,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                 for text in self.train_text_per_hashtag[hashtag]:
                     hashtag_feature.append(self.dict[text])
             except:
-                pass
+                print("################################################################")
             for text in list(set(self.test_text_per_hashtag[hashtag])-set(self.test_text_per_user[user])):
                 hashtag_feature.append(self.dict[text])
             user_feature = torch.FloatTensor(user_feature)
@@ -304,12 +304,16 @@ def cal_all_pair():
     preF = open('./tBertMlp/preBertMlp.txt', "a")
     for i in tqdm(range(len(test_dataset))):
         test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
-        pred_label = model(test_user_feature, test_hashtag_feature)
-        print(pred_label.detach().numpy.tolist()[0])
+        try:
+            pred_label = model(test_user_feature, test_hashtag_feature)
+        except:
+            continue
+        print(pred_label)
         print(test_label)
-        preF.write(f"{pred_label.detach().numpy.tolist()[0]}\n")
+        preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
         after_train = criterion(pred_label, test_label)
         print("test loss after train", after_train.item())
+
     preF.close()
 
 
