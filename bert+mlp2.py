@@ -5,8 +5,8 @@ import json
 import torch
 import numpy as np
 from tqdm import tqdm
-print(torch.cuda.is_available())
-print(print(torch.__version__))
+#print(torch.cuda.is_available())
+#print(print(torch.__version__))
 
 
 class Mlp(torch.nn.Module):
@@ -91,17 +91,26 @@ class ScratchDataset(torch.utils.data.Dataset):
         # hashtag modeling(train embedding+test others' embedding)
         if self.data_split == 'Train':
             for text in self.train_text_per_hashtag[hashtag]:
-                try:
+                hashtag_feature.append(self.dict[text])
+            user_feature = torch.FloatTensor(user_feature)
+            hashtag_feature = torch.FloatTensor(hashtag_feature)
+        if self.data_split == 'Valid':
+            try:
+                for text in self.train_text_per_hashtag[hashtag]:
                     hashtag_feature.append(self.dict[text])
-                except:
-                    #print("found no: "+text)
-                    continue
+            except:
+                pass
+            for text in list((set(self.valid_text_per_hashtag[hashtag])-set(self.valid_text_per_user[user]))):
+                hashtag_feature.append(self.dict[text])
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
         if self.data_split == 'Test':
-            for text in self.train_text_per_hashtag[hashtag]:
-                hashtag_feature.append(self.dict[text])
-            for text in (self.test_text_per_hashtag[hashtag]-self.test_text_per_user[user]):
+            try:
+                for text in self.train_text_per_hashtag[hashtag]:
+                    hashtag_feature.append(self.dict[text])
+            except:
+                pass
+            for text in list(set(self.test_text_per_hashtag[hashtag])-set(self.test_text_per_user[user])):
                 hashtag_feature.append(self.dict[text])
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
@@ -126,7 +135,33 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.train_text_per_hashtag[hashtag].append(text)
                     self.train_hashtag_per_user[user].add(hashtag)
             f.close()
-
+        if self.data_split == 'Valid':
+            trainF = open(self.train_file, encoding='utf-8')
+            validF = open(self.valid_file, encoding='utf-8')
+            for line in trainF:
+                l = line.strip('\n').split('\t')
+                text, user, hashtags = l[0], l[1], l[2:]
+                self.train_text_per_user.setdefault(user, [])
+                self.train_text_per_user[user].append(text)
+                self.train_hashtag_per_user.setdefault(user, set())
+                for hashtag in hashtags:
+                    self.train_hashtag_list.add(hashtag)
+                    self.train_text_per_hashtag.setdefault(hashtag, [])
+                    self.train_text_per_hashtag[hashtag].append(text)
+                    self.train_hashtag_per_user[user].add(hashtag)
+            for line in validF:
+                l = line.strip('\n').split('\t')
+                text, user, hashtags = l[0], l[1], l[2:]
+                self.valid_text_per_user.setdefault(user, [])
+                self.valid_text_per_user[user].append(text)
+                self.valid_hashtag_per_user.setdefault(user, set())
+                for hashtag in hashtags:
+                    self.valid_hashtag_list.add(hashtag)
+                    self.valid_text_per_hashtag.setdefault(hashtag, [])
+                    self.valid_text_per_hashtag[hashtag].append(text)
+                    self.valid_hashtag_per_user[user].add(hashtag)
+            trainF.close()
+            validF.close()
         if self.data_split == 'Test':
             trainF = open(self.train_file, encoding='utf-8')
             testF = open(self.test_file, encoding='utf-8')
@@ -162,7 +197,7 @@ class ScratchDataset(torch.utils.data.Dataset):
         if self.data_split == 'Train':
             for user in self.user_list:
                 pos_hashtag = self.train_hashtag_per_user[user]
-                neg_hashtag = list(self.train_hashtag_list - self.train_hashtag_per_user[user])
+                neg_hashtag = list(set(self.train_hashtag_list) - set(self.train_hashtag_per_user[user]))
                 num = len(neg_hashtag)
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
@@ -171,10 +206,20 @@ class ScratchDataset(torch.utils.data.Dataset):
                         j = np.random.randint(num)
                         self.user_hashtag.append((user, neg_hashtag[j]))
                         self.label.append(0)
+        if self.data_split == 'Valid':
+            for user in self.user_list:
+                pos_hashtag = self.valid_hashtag_per_user[user] - self.train_hashtag_per_user[user]
+                neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
+                for hashtag in pos_hashtag:
+                    self.user_hashtag.append((user, hashtag))
+                    self.label.append(1)
+                    for hashtag2 in neg_hashtag:
+                        self.user_hashtag.append((user, hashtag2))
+                        self.label.append(0)
         if self.data_split == 'Test':
             for user in self.user_list:
-                pos_hashtag = self.test_hashtag_per_user[user] - self.train_hashtag_per_user[user]
-                neg_hashtag = self.test_hashtag_list - self.test_hashtag_per_user[user] - self.train_hashtag_per_user[user]
+                pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
+                neg_hashtag = list(set(self.test_hashtag_list) - set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
@@ -187,22 +232,22 @@ class ScratchDataset(torch.utils.data.Dataset):
 
 
 # read files
-with open('./demo2/embeddings.json', 'r') as f:
+with open('./tData/embeddings.json', 'r') as f:
     text_emb_dict = json.load(f)
 
-with open("demo2/userList.csv", "r") as f:
+with open("tData/userList.txt", "r") as f:
     x = f.readlines()[0]
     user_list = re.findall(r"['\'](.*?)['\']", str(x))
 
 
-train_file = './demo2/train.csv'
-valid_file = './demo2/valid.csv'
-test_file = './demo2/test.csv'
+train_file = './tData/train.csv'
+valid_file = './tData/valid.csv'
+test_file = './tData/test.csv'
 
 
 def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
-    #valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=vaid_file, test_file=test_file, dict=text_emb_dict)
+    valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
     # model, criterion, optimizer
@@ -216,42 +261,39 @@ def cal_all_pair():
     epoch = 10
 
     for epoch in range(epoch):
-        print(epoch)
         for i in tqdm(range(len(train_dataset))):
+            print(i)
             train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
 
             # train process-----------------------------------
             optimizer.zero_grad()
 
             # forward pass
-            try:
-                pred_label = model(train_user_feature, train_hashtag_feature)
-                # print(pred_label)
-            except:
-                continue
+            pred_label = model(train_user_feature, train_hashtag_feature)
+            #print(pred_label)
 
             # compute loss
-            # print(train_label)
-            try:
-                loss = criterion(pred_label, train_label)
-            except:
-                tt = 1
+            #print(train_label)
+            loss = criterion(pred_label, train_label)
 
-            #print("Pair "+str(i)+": ")
-            #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
+            print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
             # backward pass
             loss.backward()
             optimizer.step()
 
-            '''
+            #'''
             # validate process----------------------------------
-            valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
-            optimizer.zero_grad()
-            pred_label = model(valid_user_feature, valid_hashtag_feature)
-            val_loss = criterion(pred_label.squeeze(), valid_label)
-            scheduler.step(val_loss)
-            '''
+            try:
+                valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
+                optimizer.zero_grad()
+                pred_label = model(valid_user_feature, valid_hashtag_feature)
+                val_loss = criterion(pred_label.squeeze(), valid_label)
+                scheduler.step(val_loss)
+            except:
+                print("no valid")
+            #'''
+
     # evaluation
     model.eval()
     for i in range(len(test_dataset)):
