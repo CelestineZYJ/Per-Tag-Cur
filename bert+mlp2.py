@@ -25,7 +25,6 @@ class Mlp(torch.nn.Module):
         # hashtag modeling
         hashtag_modeling = torch.mean(hashtag_feature, 0)
         x = torch.cat((user_modeling, hashtag_modeling), 0)
-        #print(x)
         hidden = self.fc1(x)
         relu = self.relu(hidden)
         output = self.fc2(relu)
@@ -87,7 +86,6 @@ class ScratchDataset(torch.utils.data.Dataset):
         # user modeling(always train embedding)
         for text in self.train_text_per_user[user]:
             user_feature.append(self.dict[text])
-
         # hashtag modeling(train embedding+test others' embedding)
         if self.data_split == 'Train':
             for text in self.train_text_per_hashtag[hashtag]:
@@ -100,8 +98,10 @@ class ScratchDataset(torch.utils.data.Dataset):
                     hashtag_feature.append(self.dict[text])
             except:
                 pass
+
             for text in list((set(self.valid_text_per_hashtag[hashtag])-set(self.valid_text_per_user[user]))):
                 hashtag_feature.append(self.dict[text])
+
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
         if self.data_split == 'Test':
@@ -160,6 +160,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.valid_text_per_hashtag.setdefault(hashtag, [])
                     self.valid_text_per_hashtag[hashtag].append(text)
                     self.valid_hashtag_per_user[user].add(hashtag)
+
             trainF.close()
             validF.close()
         if self.data_split == 'Test':
@@ -208,14 +209,14 @@ class ScratchDataset(torch.utils.data.Dataset):
                         self.label.append(0)
         if self.data_split == 'Valid':
             for user in self.user_list:
-                pos_hashtag = self.valid_hashtag_per_user[user] - self.train_hashtag_per_user[user]
+                pos_hashtag = list(set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
                 neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
-                    for hashtag2 in neg_hashtag:
-                        self.user_hashtag.append((user, hashtag2))
-                        self.label.append(0)
+                for hashtag2 in neg_hashtag:
+                    self.user_hashtag.append((user, hashtag2))
+                    self.label.append(0)
         if self.data_split == 'Test':
             for user in self.user_list:
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -223,9 +224,9 @@ class ScratchDataset(torch.utils.data.Dataset):
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
-                    for hashtag2 in neg_hashtag:
-                        self.user_hashtag.append((user, hashtag2))
-                        self.label.append(0)
+                for hashtag2 in neg_hashtag:
+                    self.user_hashtag.append((user, hashtag2))
+                    self.label.append(0)
 
     def load_tensor_dict(self):
         raise NotImplementedError
@@ -249,11 +250,15 @@ def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
+    print(len(train_dataset))
+    print(len(valid_dataset))
+    print(len(test_dataset))
+
 
     # model, criterion, optimizer
     model = Mlp(768, 30)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.3)  # , momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.06)  # , momentum=0.9)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
     # train the model
@@ -262,7 +267,6 @@ def cal_all_pair():
 
     for epoch in range(epoch):
         for i in tqdm(range(len(train_dataset))):
-            print(i)
             train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
 
             # train process-----------------------------------
@@ -276,7 +280,7 @@ def cal_all_pair():
             #print(train_label)
             loss = criterion(pred_label, train_label)
 
-            print("Epoch {}: train loss: {}".format(epoch, loss.item()))
+            #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
             # backward pass
             loss.backward()
@@ -288,22 +292,24 @@ def cal_all_pair():
                 valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
                 optimizer.zero_grad()
                 pred_label = model(valid_user_feature, valid_hashtag_feature)
-                val_loss = criterion(pred_label.squeeze(), valid_label)
+                val_loss = criterion(pred_label, valid_label)
                 scheduler.step(val_loss)
             except:
-                print("no valid")
+                pass
             #'''
 
     # evaluation
     model.eval()
-    for i in range(len(test_dataset)):
-        test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
-        pred_label = model(test_user_feature, test_hashtag_feature)
-        print(pred_label.squeeze())
-        print(test_label)
-        after_train = criterion(pred_label.squeeze(), test_label)
-        print("Pair " + str(i) + ": ")
-        print("test loss after train", after_train.item())
+    for i in tqdm(range(len(test_dataset))):
+        try:
+            test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+            pred_label = model(test_user_feature, test_hashtag_feature)
+            print(pred_label)
+            print(test_label)
+            after_train = criterion(pred_label, test_label)
+            print("test loss after train", after_train.item())
+        except:
+            continue
 
 
 cal_all_pair()
