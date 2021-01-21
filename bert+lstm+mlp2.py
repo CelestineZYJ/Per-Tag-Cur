@@ -16,13 +16,12 @@ class Lstm(torch.nn.Module):
         self.output_size = output_size
         self.lstm = torch.nn.LSTM(self.input_size, self.output_size)
 
-    def forward(self, user_feature, hashtag_feature):
-        lstm_output, lstm_hidden = self.lstm(user_feature[0])
+    def forward(self, user_feature):
+        lstm_output, lstm_hidden = self.lstm(user_feature[0].unsqueeze(0).unsqueeze(0))
         for i in user_feature:
-            lstm_output, lstm_hidden = self.lstm(i, lstm_hidden)
-        user_modeling = lstm_output
-        hashtag_modeling = torch.mean(hashtag_feature, 0)
-        return user_modeling, hashtag_modeling
+            lstm_output, lstm_hidden = self.lstm(i.unsqueeze(0).unsqueeze(0), lstm_hidden)
+        user_modeling = lstm_output.squeeze(0).squeeze(0)
+        return user_modeling
 
 
 class Mlp(torch.nn.Module):
@@ -37,7 +36,8 @@ class Mlp(torch.nn.Module):
         self.lstm = Lstm(self.input_size, self.input_size)
 
     def forward(self, user_feature, hashtag_feature):
-        user_modeling, hashtag_modeling = self.lstm(user_feature, hashtag_feature)
+        user_modeling = self.lstm(user_feature)
+        hashtag_modeling = torch.mean(hashtag_feature, 0)
         x = torch.cat((user_modeling, hashtag_modeling), 0)
         #print(x)
         hidden = self.fc1(x)
@@ -270,10 +270,6 @@ def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
-    print(len(train_dataset))
-    print(len(valid_dataset))
-    print(len(test_dataset))
-
 
     # model, criterion, optimizer
     model = Mlp(768, 30)
@@ -306,7 +302,7 @@ def cal_all_pair():
             loss.backward()
             optimizer.step()
 
-            #'''
+            '''
             # validate process----------------------------------
             try:
                 valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
@@ -316,7 +312,7 @@ def cal_all_pair():
                 scheduler.step(val_loss)
             except:
                 pass
-            #'''
+            '''
 
     # evaluation
     model.eval()
