@@ -3,6 +3,12 @@ from tqdm import tqdm
 from operator import itemgetter
 from tqdm import tqdm
 
+dataPath = 't'
+encoderPath = 'Bert'
+secondLayer = ''
+classifierPath = 'Mlp'
+
+
 def sort(test,predict_scores,sorted_test_path):
     test = test.readlines()
     scores = predict_scores.readlines()
@@ -24,16 +30,18 @@ def sort(test,predict_scores,sorted_test_path):
         temp_scores = scores[count:count+len(tags)]
         sort_tags,sort_scores = [list(x) for x in zip(*sorted(zip(tags, temp_scores), key=itemgetter(1), reverse=True))]
 
-        with open("sorted_test_path","a",encoding="utf-8") as sorted_test:
+        with open(sorted_test_path,"a",encoding="utf-8") as sorted_test:
              sorted_test.write(user)
              sorted_test.writelines(sort_tags)
         count += len(tags)
-    
+
+
 def main():
-    testLda = open("/Users/zyb/Desktop/NLP/Person-Hash-Predict/testLda.dat/testLda.dat","r",encoding="utf-8")
-    preLdaSvm = open("/Users/zyb/Desktop/NLP/Person-Hash-Predict/testLda.dat/preLdaSvm.txt","r",encoding="utf-8")
-    sorted_test_path = "/Users/zyb/Desktop/NLP/Person-Hash-Predict/testLda.dat/sortedTestLda.txt"
+    testLda = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'2.dat',"r",encoding="utf-8")
+    preLdaSvm = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/pre'+encoderPath+secondLayer+classifierPath+'.txt',"r",encoding="utf-8")
+    sorted_test_path = '/sortTest'+encoderPath+secondLayer+classifierPath+'.dat'
     sort(testLda,preLdaSvm,sorted_test_path)
+
 
 if __name__ == "__main__":
     main()
