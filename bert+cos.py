@@ -3,88 +3,20 @@
 import re
 import json
 import torch
+from torch.nn.functional import cosine_similarity
 import numpy as np
 from tqdm import tqdm
-#print(torch.cuda.is_available())
-#print(print(torch.__version__))
 
 
-class MultiheadSelfAttention(torch.nn.Module):
-    """
-    Multi-headed self attention
-    """
-    def __init__(
-            self,
-            input_dim,
-            embed_dim,  # q,k,v have the same dimension here
-            num_heads=1,  # By default, we use single head
-                 ):
-        super().__init__()
-        self.q_proj = torch.nn.Linear(input_dim, embed_dim)
-        self.k_proj = torch.nn.Linear(input_dim, embed_dim)
-        self.v_proj = torch.nn.Linear(input_dim, embed_dim)
-        self.attention = torch.nn.MultiheadAttention(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-        )
-
-    def forward(self, x):
-        # x: (Time, Batch_Size, Channel)
-        x = torch.unsqueeze(x, 1)
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
-        attn_output, _ = self.attention(q, k, v)
-        attn_output = torch.squeeze(attn_output, 1)
-        maxpool = torch.nn.MaxPool2d(kernel_size=(len(attn_output), 1))
-        attn_output = maxpool(attn_output)
-        return attn_output  # (Time, Batch_Size, embed_dim)
-
-
-class Lstm(torch.nn.Module):
-    def __init__(self, input_size, output_size):
-        super(Lstm, self).__init__()
-        self.input_size = input_size
-        self.output_size = output_size
-        self.lstm = torch.nn.LSTM(self.input_size, self.output_size)
-
-    def forward(self, user_feature):
-        lstm_output, lstm_hidden = self.lstm(user_feature[0])
-        for i in user_feature:
-            lstm_output, lstm_hidden = self.lstm(i, lstm_hidden)
-        user_modeling = lstm_output
-        return user_modeling
-
-
-class Mlp(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, embed_size):
-        super(Mlp, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.embed_size = embed_size
-        self.fc1 = torch.nn.Linear(self.input_size*2, self.hidden_size)
-        self.relu = torch.nn.ReLU()
-        self.fc2 = torch.nn.Linear(self.hidden_size, 1)
-        self.sigmoid = torch.nn.Sigmoid()
-        self.lstm = Lstm(self.input_size, self.input_size)
-        self.attention = MultiheadSelfAttention(self.input_size, self.embed_size)
-
-    def forward(self, user_feature, hashtag_feature):
-        user_modeling = self.lstm(user_feature)
-        hashtag_modeling = self.attention(hashtag_feature)
-        x = torch.cat((user_modeling, hashtag_modeling), 0)
-        #print(x)
-        hidden = self.fc1(x)
-        relu = self.relu(hidden)
-        output = self.fc2(relu)
-        output = self.sigmoid(output)
-        return output
+# print(torch.cuda.is_available())
+# print(print(torch.__version__))
 
 
 class ScratchDataset(torch.utils.data.Dataset):
     """
     Return (all tensors of user,  all tensors of hashtag, label)
     """
+
     def __init__(
             self,
             data_split,
@@ -94,7 +26,7 @@ class ScratchDataset(torch.utils.data.Dataset):
             test_file,
             dict,  # you need to implement load dict of tensors by yourself
             neg_sampling=5,
-            ):
+    ):
         """
         user_list: users occurs in both train, valid and test (which we works on)
         data_file: format of 'twitter_text    user     hashtag1     hashtag2     ...'
@@ -148,7 +80,7 @@ class ScratchDataset(torch.utils.data.Dataset):
             except:
                 pass
 
-            for text in list((set(self.valid_text_per_hashtag[hashtag])-set(self.valid_text_per_user[user]))):
+            for text in list(set(self.valid_text_per_hashtag[hashtag]) - set(self.valid_text_per_user[user])):
                 hashtag_feature.append(self.dict[text])
 
             user_feature = torch.FloatTensor(user_feature)
@@ -159,7 +91,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                     hashtag_feature.append(self.dict[text])
             except:
                 pass
-            for text in list(set(self.test_text_per_hashtag[hashtag])-set(self.test_text_per_user[user])):
+            for text in list(set(self.test_text_per_hashtag[hashtag]) - set(self.test_text_per_user[user])):
                 hashtag_feature.append(self.dict[text])
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
@@ -259,7 +191,8 @@ class ScratchDataset(torch.utils.data.Dataset):
         if self.data_split == 'Valid':
             for user in self.user_list:
                 pos_hashtag = list(set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
-                neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
+                neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(
+                    self.train_hashtag_per_user[user]))
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
@@ -267,11 +200,12 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag2))
                     self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./tBertLstmAttMlp/testBertLstmAttMlp.dat', "a")
+            labelF = open('./tBertCos/testBertCos.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
-                neg_hashtag = list(set(self.test_hashtag_list) - set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
+                neg_hashtag = list(set(self.test_hashtag_list) - set(self.test_hashtag_per_user[user]) - set(
+                    self.train_hashtag_per_user[user]))
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
@@ -294,83 +228,38 @@ with open("tData/userList.txt", "r") as f:
     x = f.readlines()[0]
     user_list = re.findall(r"['\'](.*?)['\']", str(x))
 
-
 train_file = './tData/train.csv'
 valid_file = './tData/valid.csv'
 test_file = './tData/test.csv'
 
 
 def cal_all_pair():
-    train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
-    valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
-    print(len(train_dataset))
-    print(len(valid_dataset))
-    print(len(test_dataset))
 
-
-    # model, criterion, optimizer
-    model = Mlp(768, 30, 100)
-    criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)  # , momentum=0.9)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
-
-    # train the model
-    model.train()
-    epoch = 10
-
-    for epoch in range(epoch):
-        for i in tqdm(range(len(train_dataset))):
-            train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
-
-            # train process-----------------------------------
-            optimizer.zero_grad()
-
-            # forward pass
-            pred_label = model(train_user_feature, train_hashtag_feature)
-            #print(pred_label)
-
-            # compute loss
-            #print(train_label)
-            loss = criterion(pred_label, train_label)
-
-            #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
-
-            # backward pass
-            loss.backward()
-            optimizer.step()
-
-            #'''
-            # validate process----------------------------------
-            try:
-                valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
-                optimizer.zero_grad()
-                pred_label = model(valid_user_feature, valid_hashtag_feature)
-                val_loss = criterion(pred_label, valid_label)
-                scheduler.step(val_loss)
-            except:
-                pass
-            #'''
-
-    # evaluation
-    model.eval()
-    fr = open("./tBertLstmAttMlp/testBertLstmAttMlp.dat", 'r')
-    fw = open("./tBertLstmAttMlp/testBertLstmAttMlp2.dat", 'w')
+    fr = open("./tBertCos/testBertCos.dat", 'r')
+    fw = open("./tBertCos/testBertCos2.dat", 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./tBertLstmAttMlp/preBertLstmAttMlp.txt', "a")
+    preF = open('./tBertCos/preBertCos.txt', "a")
     last_user = lines[0][6:]
+    print('# query 0', file=fw)
     for i in tqdm(range(len(test_dataset))):
+        line = lines[i]
         test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+        user = line[6:]
+        if (user == last_user):
+            pass
+        else:
+            print('# query '+user, file=fw)
+            last_user = user
         try:
-            pred_label = model(test_user_feature, test_hashtag_feature)
+            pred_label = cosine_similarity(torch.mean(test_user_feature, 0), torch.mean(test_hashtag_feature, 0), dim=0)
+            print(line, file=fw)
         except:
             continue
-        print(pred_label)
-        print(test_label)
-        preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
-        after_train = criterion(pred_label, test_label)
-        print("test loss after train", after_train.item())
+
+        preF.write(f"{pred_label}\n")
+
     preF.close()
 
 

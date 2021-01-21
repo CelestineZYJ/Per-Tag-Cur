@@ -41,21 +41,6 @@ class MultiheadSelfAttention(torch.nn.Module):
         return attn_output  # (Time, Batch_Size, embed_dim)
 
 
-class Lstm(torch.nn.Module):
-    def __init__(self, input_size, output_size):
-        super(Lstm, self).__init__()
-        self.input_size = input_size
-        self.output_size = output_size
-        self.lstm = torch.nn.LSTM(self.input_size, self.output_size)
-
-    def forward(self, user_feature):
-        lstm_output, lstm_hidden = self.lstm(user_feature[0])
-        for i in user_feature:
-            lstm_output, lstm_hidden = self.lstm(i, lstm_hidden)
-        user_modeling = lstm_output
-        return user_modeling
-
-
 class Mlp(torch.nn.Module):
     def __init__(self, input_size, hidden_size, embed_size):
         super(Mlp, self).__init__()
@@ -66,13 +51,11 @@ class Mlp(torch.nn.Module):
         self.relu = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
-        self.lstm = Lstm(self.input_size, self.input_size)
         self.attention = MultiheadSelfAttention(self.input_size, self.embed_size)
 
     def forward(self, user_feature, hashtag_feature):
-        user_modeling = self.lstm(user_feature)
         hashtag_modeling = self.attention(hashtag_feature)
-        x = torch.cat((user_modeling, hashtag_modeling), 0)
+        x = hashtag_modeling
         #print(x)
         hidden = self.fc1(x)
         relu = self.relu(hidden)
@@ -267,7 +250,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag2))
                     self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./tBertLstmAttMlp/testBertLstmAttMlp.dat', "a")
+            labelF = open('./tBertAttTag/testBertAttTag.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -321,13 +304,13 @@ def cal_all_pair():
 
     for epoch in range(epoch):
         for i in tqdm(range(len(train_dataset))):
-            train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
+            train_hashtag_feature, train_label = train_dataset[i]
 
             # train process-----------------------------------
             optimizer.zero_grad()
 
             # forward pass
-            pred_label = model(train_user_feature, train_hashtag_feature)
+            pred_label = model(train_hashtag_feature)
             #print(pred_label)
 
             # compute loss
@@ -343,9 +326,9 @@ def cal_all_pair():
             #'''
             # validate process----------------------------------
             try:
-                valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
+                valid_hashtag_feature, valid_label = valid_dataset[i]
                 optimizer.zero_grad()
-                pred_label = model(valid_user_feature, valid_hashtag_feature)
+                pred_label = model(valid_hashtag_feature)
                 val_loss = criterion(pred_label, valid_label)
                 scheduler.step(val_loss)
             except:
@@ -354,16 +337,16 @@ def cal_all_pair():
 
     # evaluation
     model.eval()
-    fr = open("./tBertLstmAttMlp/testBertLstmAttMlp.dat", 'r')
-    fw = open("./tBertLstmAttMlp/testBertLstmAttMlp2.dat", 'w')
+    fr = open("./tBertAttTag/testBertAttTag.dat", 'r')
+    fw = open("./tBertAttTag/testBertAttTag2.dat", 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./tBertLstmAttMlp/preBertLstmAttMlp.txt', "a")
+    preF = open('./tBertAttTag/preBertAttTag.txt', "a")
     last_user = lines[0][6:]
     for i in tqdm(range(len(test_dataset))):
-        test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+        test_hashtag_feature, test_label = test_dataset[i]
         try:
-            pred_label = model(test_user_feature, test_hashtag_feature)
+            pred_label = model(test_hashtag_feature)
         except:
             continue
         print(pred_label)

@@ -259,12 +259,12 @@ def cal_all_pair():
     # model, criterion, optimizer
     model = Mlp(768, 30)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.0005)  # , momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)  # , momentum=0.9)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
-    '''
+
     # train the model
     model.train()
-    epoch = 1
+    epoch = 20
     
     for epoch in range(epoch):
         for i in tqdm(range(len(train_dataset))):
@@ -287,7 +287,7 @@ def cal_all_pair():
             loss.backward()
             optimizer.step()
 
-            
+            '''
             # validate process----------------------------------
             try:
                 valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
@@ -297,15 +297,28 @@ def cal_all_pair():
                 scheduler.step(val_loss)
             except:
                 pass
-    '''
+            '''
 
     # evaluation
     model.eval()
+    fr = open("./tBertMlp/testBertMlp.dat", 'r')
+    fw = open("./tBertMlp/testBertMlp2.dat", 'w')
+    lines = fr.readlines()
+    lines = [line.strip() for line in lines if line[0] != '#']
     preF = open('./tBertMlp/preBertMlp.txt', "a")
+    last_user = lines[0][6:]
     for i in tqdm(range(len(test_dataset))):
+        line = lines[i]
         test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+        user = line[6:]
+        if (user == last_user):
+            pass
+        else:
+            print('# query ' + user, file=fw)
+            last_user = user
         try:
             pred_label = model(test_user_feature, test_hashtag_feature)
+            print(line, file=fw)
         except:
             continue
         print(pred_label)

@@ -320,11 +320,24 @@ def cal_all_pair():
 
     # evaluation
     model.eval()
+    fr = open("./tBertLstmMlp/testBertLstmMlp.dat", 'r')
+    fw = open("./tBertLstmMlp/testBertLstmMlp2.dat", 'w')
+    lines = fr.readlines()
+    lines = [line.strip() for line in lines if line[0] != '#']
     preF = open('./tBertLstmMlp/preBertLstmMlp.txt', "a")
+    last_user = lines[0][6:]
     for i in tqdm(range(len(test_dataset))):
+        line = lines[i]
         test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+        user = line[6:]
+        if (user == last_user):
+            pass
+        else:
+            print('# query ' + user, file=fw)
+            last_user = user
         try:
             pred_label = model(test_user_feature, test_hashtag_feature)
+            print(line, file=fw)
         except:
             continue
         print(pred_label)
@@ -332,6 +345,7 @@ def cal_all_pair():
         preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
         after_train = criterion(pred_label, test_label)
         print("test loss after train", after_train.item())
+
     preF.close()
 
 
