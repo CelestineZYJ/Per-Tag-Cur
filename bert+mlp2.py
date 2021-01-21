@@ -5,6 +5,8 @@ import json
 import torch
 import numpy as np
 from tqdm import tqdm
+from Data.scratch_dataset import my_collate
+import torch.utils.data as data
 #print(torch.cuda.is_available())
 #print(print(torch.__version__))
 
@@ -19,17 +21,33 @@ class Mlp(torch.nn.Module):
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, user_feature, hashtag_feature):
+    def forward(self, user_features, user_lens, hashtag_features, hashtag_lens):
         # user modeling
-        user_modeling = torch.mean(user_feature, 0)
+        user_embeds = self.user_modeling(user_features, user_lens)
+
         # hashtag modeling
-        hashtag_modeling = torch.mean(hashtag_feature, 0)
-        x = torch.cat((user_modeling, hashtag_modeling), 0)
+        hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens)
+
+        x = torch.cat((user_embeds, hashtag_embeds), dim=1)
         hidden = self.fc1(x)
         relu = self.relu(hidden)
         output = self.fc2(relu)
         output = self.sigmoid(output)
         return output
+
+    def user_modeling(self, user_features, user_lens):
+        outputs = []
+        for user_feature, user_len in zip(user_features, user_lens):
+            outputs.append(torch.mean(user_feature[:user_len.item()], dim=0))
+        outputs = torch.stack(outputs)
+        return outputs
+
+    def hashtag_modeling(self, hashtag_features, hashtag_lens):
+        outputs = []
+        for hashtag_feature, hashtag_len in zip(hashtag_features, hashtag_lens):
+            outputs.append(torch.mean(hashtag_feature[:hashtag_len.item()], dim=0))
+        outputs = torch.stack(outputs)
+        return outputs
 
 
 class ScratchDataset(torch.utils.data.Dataset):
@@ -85,29 +103,29 @@ class ScratchDataset(torch.utils.data.Dataset):
         user_feature, hashtag_feature = [], []
         # user modeling(always train embedding)
         for text in self.train_text_per_user[user]:
-            user_feature.append(self.dict[text])
+            user_feature.append(self.get_feature(self.dict, text))
         # hashtag modeling(train embedding+test others' embedding)
         if self.data_split == 'Train':
             for text in self.train_text_per_hashtag[hashtag]:
-                hashtag_feature.append(self.dict[text])
+                hashtag_feature.append(self.get_feature(self.dict, text))
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
         if self.data_split == 'Valid':
             try:
                 for text in self.train_text_per_hashtag[hashtag]:
-                    hashtag_feature.append(self.dict[text])
+                    hashtag_feature.append(self.get_feature(self.dict, text))
             except:
                 pass
 
             for text in list(set(self.valid_text_per_hashtag[hashtag])-set(self.valid_text_per_user[user])):
-                hashtag_feature.append(self.dict[text])
+                hashtag_feature.append(self.get_feature(self.dict, text))
 
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
         if self.data_split == 'Test':
             try:
                 for text in self.train_text_per_hashtag[hashtag]:
-                    hashtag_feature.append(self.dict[text])
+                    hashtag_feature.append(self.get_feature(self.dict, text))
             except:
                 print("################################################################")
             for text in list(set(self.test_text_per_hashtag[hashtag])-set(self.test_text_per_user[user])):
@@ -115,6 +133,13 @@ class ScratchDataset(torch.utils.data.Dataset):
             user_feature = torch.FloatTensor(user_feature)
             hashtag_feature = torch.FloatTensor(hashtag_feature)
         return user_feature, hashtag_feature, torch.FloatTensor([self.label[idx]])
+
+    def get_feature(self, dict, key):
+        if key in dict:
+            return dict[key]
+        else:
+            return [0] * 768
+
 
     def __len__(self):
         return len(self.label)
@@ -238,50 +263,57 @@ class ScratchDataset(torch.utils.data.Dataset):
 
 
 # read files
-with open('./tData/embeddings.json', 'r') as f:
+with open('./demo2/embeddings.json', 'r') as f:
     text_emb_dict = json.load(f)
 
-with open("tData/userList.txt", "r") as f:
+with open("demo2/userList.csv", "r") as f:
     x = f.readlines()[0]
     user_list = re.findall(r"['\'](.*?)['\']", str(x))
 
 
-train_file = './tData/train.csv'
-valid_file = './tData/valid.csv'
-test_file = './tData/test.csv'
+train_file = './demo2/train.csv'
+valid_file = './demo2/valid.csv'
+test_file = './demo2/test.csv'
 
 
 def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
-    test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
+    # test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
+    train_dataloader = data.DataLoader(train_dataset, batch_size=512, shuffle=True, collate_fn=my_collate, num_workers=8)
     # model, criterion, optimizer
     model = Mlp(768, 30)
     criterion = torch.nn.BCELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)  # , momentum=0.9)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
+    if torch.cuda.is_available():
+        model.cuda()
+
     # train the model
     model.train()
     epoch = 20
     
     for epoch in range(epoch):
-        for i in tqdm(range(len(train_dataset))):
-            train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
+        for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
+            if torch.cuda.is_available():
+                train_user_features = train_user_features.cuda()
+                train_user_lens = train_user_lens.cuda()
+                train_hashtag_features = train_hashtag_features.cuda()
+                train_hashtag_lens = train_hashtag_lens.cuda()
+                labels = labels.cuda()
 
             # train process-----------------------------------
             optimizer.zero_grad()
 
             # forward pass
-            pred_label = model(train_user_feature, train_hashtag_feature)
-            print(pred_label)
+            pred_labels = model(train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens)
 
             # compute loss
-            print(train_label)
-            loss = criterion(pred_label, train_label)
+            loss = criterion(pred_labels, labels.reshape(-1, 1))
 
-            print("Epoch {}: train loss: {}".format(epoch, loss.item()))
+            # print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
             # backward pass
             loss.backward()
@@ -300,34 +332,34 @@ def cal_all_pair():
             '''
 
     # evaluation
-    model.eval()
-    fr = open("./tBertMlp/testBertMlp.dat", 'r')
-    fw = open("./tBertMlp/testBertMlp2.dat", 'w')
-    lines = fr.readlines()
-    lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./tBertMlp/preBertMlp.txt', "a")
-    last_user = lines[0][6:]
-    for i in tqdm(range(len(test_dataset))):
-        line = lines[i]
-        test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
-        user = line[6:]
-        if (user == last_user):
-            pass
-        else:
-            print('# query ' + user, file=fw)
-            last_user = user
-        try:
-            pred_label = model(test_user_feature, test_hashtag_feature)
-            print(line, file=fw)
-        except:
-            continue
-        print(pred_label)
-        print(test_label)
-        preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
-        after_train = criterion(pred_label, test_label)
-        print("test loss after train", after_train.item())
-
-    preF.close()
+    # model.eval()
+    # fr = open("./tBertMlp/testBertMlp.dat", 'r')
+    # fw = open("./tBertMlp/testBertMlp2.dat", 'w')
+    # lines = fr.readlines()
+    # lines = [line.strip() for line in lines if line[0] != '#']
+    # preF = open('./tBertMlp/preBertMlp.txt', "a")
+    # last_user = lines[0][6:]
+    # for i in tqdm(range(len(test_dataset))):
+    #     line = lines[i]
+    #     test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+    #     user = line[6:]
+    #     if (user == last_user):
+    #         pass
+    #     else:
+    #         print('# query ' + user, file=fw)
+    #         last_user = user
+    #     try:
+    #         pred_label = model(test_user_feature, test_hashtag_feature)
+    #         print(line, file=fw)
+    #     except:
+    #         continue
+    #     print(pred_label)
+    #     print(test_label)
+    #     preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
+    #     after_train = criterion(pred_label, test_label)
+    #     print("test loss after train", after_train.item())
+    #
+    # preF.close()
 
 
 cal_all_pair()
