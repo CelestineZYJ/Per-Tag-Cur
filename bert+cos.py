@@ -7,9 +7,13 @@ from torch.nn.functional import cosine_similarity
 import numpy as np
 from tqdm import tqdm
 
-
 # print(torch.cuda.is_available())
 # print(print(torch.__version__))
+
+dataPath = 't'
+encoderPath = 'Bert'
+secondLayer = 'Cos'
+classifierPath = ''
 
 
 class ScratchDataset(torch.utils.data.Dataset):
@@ -200,7 +204,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag2))
                     self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./tBertCos/testBertCos.dat', "a")
+            labelF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -221,26 +225,26 @@ class ScratchDataset(torch.utils.data.Dataset):
 
 
 # read files
-with open('./tData/embeddings.json', 'r') as f:
+with open('./'+dataPath+'Data/embeddings.json', 'r') as f:
     text_emb_dict = json.load(f)
 
-with open("tData/userList.txt", "r") as f:
+with open('./'+dataPath+'Data/userList.txt', "r") as f:
     x = f.readlines()[0]
     user_list = re.findall(r"['\'](.*?)['\']", str(x))
 
-train_file = './tData/train.csv'
-valid_file = './tData/valid.csv'
-test_file = './tData/test.csv'
+train_file = './'+dataPath+'Data/train.csv'
+valid_file = './'+dataPath+'Data/valid.csv'
+test_file = './'+dataPath+'Data/test.csv'
 
 
 def cal_all_pair():
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
-    fr = open("./tBertCos/testBertCos.dat", 'r')
-    fw = open("./tBertCos/testBertCos2.dat", 'w')
+    fr = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/test' + encoderPath + secondLayer + classifierPath + '.dat', 'r')
+    fw = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/test' + encoderPath + secondLayer + classifierPath + '2.dat', 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./tBertCos/preBertCos.txt', "a")
+    preF = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/pre' + encoderPath + secondLayer + classifierPath + '.txt', "a")
     last_user = lines[0][6:]
     print('# query 0', file=fw)
     for i in tqdm(range(len(test_dataset))):

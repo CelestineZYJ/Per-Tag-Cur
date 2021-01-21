@@ -8,6 +8,11 @@ from tqdm import tqdm
 #print(torch.cuda.is_available())
 #print(print(torch.__version__))
 
+dataPath = 't'
+encoderPath = 'Bert'
+secondLayer = 'LstmAtt'
+classifierPath = 'Mlp'
+
 
 class MultiheadSelfAttention(torch.nn.Module):
     """
@@ -267,7 +272,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag2))
                     self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./tBertLstmAttMlp/testBertLstmAttMlp.dat', "a")
+            labelF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -287,17 +292,16 @@ class ScratchDataset(torch.utils.data.Dataset):
 
 
 # read files
-with open('./tData/embeddings.json', 'r') as f:
+with open('./'+dataPath+'Data/embeddings.json', 'r') as f:
     text_emb_dict = json.load(f)
 
-with open("tData/userList.txt", "r") as f:
+with open('./'+dataPath+'Data/userList.txt', "r") as f:
     x = f.readlines()[0]
     user_list = re.findall(r"['\'](.*?)['\']", str(x))
 
-
-train_file = './tData/train.csv'
-valid_file = './tData/valid.csv'
-test_file = './tData/test.csv'
+train_file = './'+dataPath+'Data/train.csv'
+valid_file = './'+dataPath+'Data/valid.csv'
+test_file = './'+dataPath+'Data/test.csv'
 
 
 def cal_all_pair():
@@ -354,29 +358,39 @@ def cal_all_pair():
 
     # evaluation
     model.eval()
-    fr = open("./tBertLstmAttMlp/testBertLstmAttMlp.dat", 'r')
-    fw = open("./tBertLstmAttMlp/testBertLstmAttMlp2.dat", 'w')
+    fr = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/test' + encoderPath + secondLayer + classifierPath + '.dat', 'r')
+    fw = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/test' + encoderPath + secondLayer + classifierPath + '2.dat', 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./tBertLstmAttMlp/preBertLstmAttMlp.txt', "a")
+    preF = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/pre' + encoderPath + secondLayer + classifierPath + '.txt', "a")
     last_user = lines[0][6:]
+    print('# query 0', file=fw)
     for i in tqdm(range(len(test_dataset))):
         line = lines[i]
         test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+        test_user_feature = test_user_feature.cuda()
+        test_hashtag_feature = test_hashtag_feature.cuda()
+        test_label = test_label.cuda()
+
         user = line[6:]
         if (user == last_user):
             pass
         else:
             print('# query ' + user, file=fw)
             last_user = user
+
         try:
-            pred_label = model(test_user_feature, test_hashtag_feature)
+            pred_label = model('Test', test_user_feature, 0, test_hashtag_feature, 0)
             print(line, file=fw)
         except:
+            print("no test")
             continue
+
         print(pred_label)
         print(test_label)
-        preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
+
+        pred_label = pred_label.cpu().detach().numpy().tolist()[0]
+        preF.write(f"{pred_label}\n")
         after_train = criterion(pred_label, test_label)
         print("test loss after train", after_train.item())
 

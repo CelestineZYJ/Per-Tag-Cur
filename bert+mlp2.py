@@ -299,7 +299,7 @@ def cal_all_pair():
 
     # train the model
     model.train()
-    epoch = 20
+    epoch = 30
 
     for epoch in range(epoch):
         for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
@@ -336,7 +336,6 @@ def cal_all_pair():
             #     pass
 
     # evaluation
-
     model.eval()
     fr = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
     fw = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', 'w')
@@ -344,6 +343,7 @@ def cal_all_pair():
     lines = [line.strip() for line in lines if line[0] != '#']
     preF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
     last_user = lines[0][6:]
+    print('# query 0', file=fw)
     for i in tqdm(range(len(test_dataset))):
         line = lines[i]
         test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
