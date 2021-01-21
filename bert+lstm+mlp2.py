@@ -5,6 +5,8 @@ import json
 import torch
 import numpy as np
 from tqdm import tqdm
+from Data.scratch_dataset import my_collate
+import torch.utils.data as data
 #print(torch.cuda.is_available())
 #print(print(torch.__version__))
 
@@ -21,12 +23,23 @@ class Lstm(torch.nn.Module):
         self.output_size = output_size
         self.lstm = torch.nn.LSTM(self.input_size, self.output_size)
 
-    def forward(self, user_feature):
-        lstm_output, lstm_hidden = self.lstm(user_feature[0].unsqueeze(0).unsqueeze(0))
-        for i in user_feature:
-            lstm_output, lstm_hidden = self.lstm(i.unsqueeze(0).unsqueeze(0), lstm_hidden)
-        user_modeling = lstm_output.squeeze(0).squeeze(0)
-        return user_modeling
+    def forward(self, user_features, user_lens):
+        outputs = []
+        for user_feature, user_len in zip(user_features, user_lens):
+            # print(user_feature[:user_len.item()].size())  torch.Size([77, 768])
+            lstm_inputs = user_feature[:user_len.item()]
+            lstm_output, lstm_hidden = self.lstm(lstm_inputs[0].unsqueeze(0).unsqueeze(0))
+            for i in lstm_inputs:
+                lstm_output, lstm_hidden = self.lstm(i.unsqueeze(0).unsqueeze(0), lstm_hidden)
+            lstm_output = lstm_output.squeeze(0).squeeze(0)
+
+            outputs.append(lstm_output)
+            # print(torch.mean(user_feature[:user_len.item()], dim=0).size())  torch.Size([768])
+            #outputs.append(torch.mean(user_feature[:user_len.item()], dim=0))
+
+        outputs = torch.stack(outputs)
+        # print(outputs.size())  torch.Size([512, 768])
+        return outputs
 
 
 class Mlp(torch.nn.Module):
@@ -34,28 +47,45 @@ class Mlp(torch.nn.Module):
         super(Mlp, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.fc1 = torch.nn.Linear(self.input_size*2, self.hidden_size)
+        self.fc1 = torch.nn.Linear(self.input_size * 2, self.hidden_size)
         self.relu = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
         self.lstm = Lstm(self.input_size, self.input_size)
 
-    def forward(self, user_feature, hashtag_feature):
-        user_modeling = self.lstm(user_feature)
-        hashtag_modeling = torch.mean(hashtag_feature, 0)
-        x = torch.cat((user_modeling, hashtag_modeling), 0)
-        #print(x)
+    def forward(self, sign, user_features, user_lens, hashtag_features, hashtag_lens):
+        if sign == 'Train':
+            user_embeds = self.lstm(user_features, user_lens)
+            hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens)
+            #print(user_embeds.size())  torch.Size([512, 768])
+            #print(hashtag_embeds.size())  torch.Size([512, 768])
+            x = torch.cat((user_embeds, hashtag_embeds), dim=1)
+            #print(x.size())  torch.Size([512, 1536])
+
+        if sign == 'Test':
+            user_modeling = torch.mean(user_features, 0)
+            hashtag_modeling = torch.mean(hashtag_features, 0)
+            x = torch.cat((user_modeling, hashtag_modeling), 0)
+
         hidden = self.fc1(x)
         relu = self.relu(hidden)
         output = self.fc2(relu)
         output = self.sigmoid(output)
         return output
 
+    def hashtag_modeling(self, hashtag_features, hashtag_lens):
+        outputs = []
+        for hashtag_feature, hashtag_len in zip(hashtag_features, hashtag_lens):
+            outputs.append(torch.mean(hashtag_feature[:hashtag_len.item()], dim=0))
+        outputs = torch.stack(outputs)
+        return outputs
+
 
 class ScratchDataset(torch.utils.data.Dataset):
     """
     Return (all tensors of user,  all tensors of hashtag, label)
     """
+
     def __init__(
             self,
             data_split,
@@ -65,7 +95,7 @@ class ScratchDataset(torch.utils.data.Dataset):
             test_file,
             dict,  # you need to implement load dict of tensors by yourself
             neg_sampling=5,
-            ):
+    ):
         """
         user_list: users occurs in both train, valid and test (which we works on)
         data_file: format of 'twitter_text    user     hashtag1     hashtag2     ...'
@@ -105,36 +135,39 @@ class ScratchDataset(torch.utils.data.Dataset):
         user_feature, hashtag_feature = [], []
         # user modeling(always train embedding)
         for text in self.train_text_per_user[user]:
-            user_feature.append(self.dict[text])
+            user_feature.append(self.get_feature(self.dict, text))
         # hashtag modeling(train embedding+test others' embedding)
         if self.data_split == 'Train':
             for text in self.train_text_per_hashtag[hashtag]:
-                hashtag_feature.append(self.dict[text])
-            user_feature = torch.FloatTensor(user_feature)
-            hashtag_feature = torch.FloatTensor(hashtag_feature)
+                hashtag_feature.append(self.get_feature(self.dict, text))
+
         if self.data_split == 'Valid':
             try:
                 for text in self.train_text_per_hashtag[hashtag]:
-                    hashtag_feature.append(self.dict[text])
+                    hashtag_feature.append(self.get_feature(self.dict, text))
             except:
                 pass
 
-            for text in list((set(self.valid_text_per_hashtag[hashtag])-set(self.valid_text_per_user[user]))):
-                hashtag_feature.append(self.dict[text])
+            for text in list(set(self.valid_text_per_hashtag[hashtag]) - set(self.valid_text_per_user[user])):
+                hashtag_feature.append(self.get_feature(self.dict, text))
 
-            user_feature = torch.FloatTensor(user_feature)
-            hashtag_feature = torch.FloatTensor(hashtag_feature)
         if self.data_split == 'Test':
             try:
                 for text in self.train_text_per_hashtag[hashtag]:
-                    hashtag_feature.append(self.dict[text])
+                    hashtag_feature.append(self.get_feature(self.dict, text))
             except:
                 pass
-            for text in list(set(self.test_text_per_hashtag[hashtag])-set(self.test_text_per_user[user])):
+
+            for text in list(set(self.test_text_per_hashtag[hashtag]) - set(self.test_text_per_user[user])):
                 hashtag_feature.append(self.dict[text])
-            user_feature = torch.FloatTensor(user_feature)
-            hashtag_feature = torch.FloatTensor(hashtag_feature)
+
+        user_feature = torch.FloatTensor(user_feature)
+        hashtag_feature = torch.FloatTensor(hashtag_feature)
+
         return user_feature, hashtag_feature, torch.FloatTensor([self.label[idx]])
+
+    def get_feature(self, dict, key):
+        return dict[key]
 
     def __len__(self):
         return len(self.label)
@@ -230,7 +263,8 @@ class ScratchDataset(torch.utils.data.Dataset):
         if self.data_split == 'Valid':
             for user in self.user_list:
                 pos_hashtag = list(set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
-                neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
+                neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(
+                    self.train_hashtag_per_user[user]))
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
@@ -272,33 +306,40 @@ test_file = './'+dataPath+'Data/test.csv'
 
 def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
-    valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
+    #valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
+    train_dataloader = data.DataLoader(train_dataset, batch_size=512, shuffle=True, collate_fn=my_collate, num_workers=0)
     # model, criterion, optimizer
     model = Mlp(768, 30)
     criterion = torch.nn.BCELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
+
+    if torch.cuda.is_available():
+        model.cuda()
 
     # train the model
     model.train()
-    epoch = 10
+    epoch = 30
 
     for epoch in range(epoch):
-        for i in tqdm(range(len(train_dataset))):
-            train_user_feature, train_hashtag_feature, train_label = train_dataset[i]
+        for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
+            if torch.cuda.is_available():
+                train_user_features = train_user_features.cuda()
+                train_user_lens = train_user_lens.cuda()
+                train_hashtag_features = train_hashtag_features.cuda()
+                train_hashtag_lens = train_hashtag_lens.cuda()
+                labels = labels.cuda()
 
             # train process-----------------------------------
             optimizer.zero_grad()
 
             # forward pass
-            pred_label = model(train_user_feature, train_hashtag_feature)
-            #print(pred_label)
+            pred_labels = model('Train', train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens)
 
             # compute loss
-            #print(train_label)
-            loss = criterion(pred_label, train_label)
+            loss = criterion(pred_labels, labels.reshape(-1, 1))
 
             #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
@@ -306,24 +347,23 @@ def cal_all_pair():
             loss.backward()
             optimizer.step()
 
-            '''
-            # validate process----------------------------------
-            try:
-                valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
-                optimizer.zero_grad()
-                pred_label = model(valid_user_feature, valid_hashtag_feature)
-                val_loss = criterion(pred_label, valid_label)
-                scheduler.step(val_loss)
-            except:
-                pass
-            '''
+            # # validate process----------------------------------
+            # try:
+            #     valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
+            #     optimizer.zero_grad()
+            #     pred_label = model(valid_user_feature, valid_hashtag_feature)
+            #     val_loss = criterion(pred_label, valid_label)
+            #     scheduler.step(val_loss)
+            # except:
+            #     pass
 
     # evaluation
-    fr = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/test' + encoderPath + secondLayer + classifierPath + '.dat', 'r')
-    fw = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/test' + encoderPath + secondLayer + classifierPath + '2.dat', 'w')
+    model.eval()
+    fr = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
+    fw = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./' + dataPath + encoderPath + secondLayer + classifierPath + '/pre' + encoderPath + secondLayer + classifierPath + '.txt', "a")
+    preF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
     last_user = lines[0][6:]
     print('# query 0', file=fw)
     for i in tqdm(range(len(test_dataset))):
