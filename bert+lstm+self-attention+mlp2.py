@@ -37,7 +37,7 @@ class MultiheadSelfAttention(torch.nn.Module):
         attn_output, _ = self.attention(q, k, v)
         attn_output = torch.squeeze(attn_output, 1)
         maxpool = torch.nn.MaxPool2d(kernel_size=(len(attn_output), 1))
-        attn_output = maxpool(attn_output)
+        attn_output = maxpool(attn_output.unsqueeze(0)).squeeze(0).squeeze(0)
         return attn_output  # (Time, Batch_Size, embed_dim)
 
 
@@ -49,10 +49,10 @@ class Lstm(torch.nn.Module):
         self.lstm = torch.nn.LSTM(self.input_size, self.output_size)
 
     def forward(self, user_feature):
-        lstm_output, lstm_hidden = self.lstm(user_feature[0])
+        lstm_output, lstm_hidden = self.lstm(user_feature[0].unsqueeze(0).unsqueeze(0))
         for i in user_feature:
-            lstm_output, lstm_hidden = self.lstm(i, lstm_hidden)
-        user_modeling = lstm_output
+            lstm_output, lstm_hidden = self.lstm(i.unsqueeze(0).unsqueeze(0), lstm_hidden)
+        user_modeling = lstm_output.squeeze(0).squeeze(0)
         return user_modeling
 
 
@@ -62,7 +62,7 @@ class Mlp(torch.nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.embed_size = embed_size
-        self.fc1 = torch.nn.Linear(self.input_size*2, self.hidden_size)
+        self.fc1 = torch.nn.Linear(self.input_size+self.embed_size, self.hidden_size)
         self.relu = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
@@ -361,9 +361,17 @@ def cal_all_pair():
     preF = open('./tBertLstmAttMlp/preBertLstmAttMlp.txt', "a")
     last_user = lines[0][6:]
     for i in tqdm(range(len(test_dataset))):
+        line = lines[i]
         test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+        user = line[6:]
+        if (user == last_user):
+            pass
+        else:
+            print('# query ' + user, file=fw)
+            last_user = user
         try:
             pred_label = model(test_user_feature, test_hashtag_feature)
+            print(line, file=fw)
         except:
             continue
         print(pred_label)
@@ -371,6 +379,7 @@ def cal_all_pair():
         preF.write(f"{pred_label.detach().numpy().tolist()[0]}\n")
         after_train = criterion(pred_label, test_label)
         print("test loss after train", after_train.item())
+
     preF.close()
 
 
