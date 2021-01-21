@@ -11,6 +11,11 @@ import torch.utils.data as data
 # print(torch.cuda.is_available())
 # print(print(torch.__version__))
 
+dataPath = 't'
+encoderPath = 'Bert'
+secondLayer = ''
+classifierPath = 'Mlp'
+
 
 class Mlp(torch.nn.Module):
     def __init__(self, input_size, hidden_size):
@@ -245,7 +250,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag2))
                     self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./tBertMlp/testBertMlp.dat', "a")
+            labelF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -265,16 +270,16 @@ class ScratchDataset(torch.utils.data.Dataset):
 
 
 # read files
-with open('./tData/embeddings.json', 'r') as f:
+with open('./'+dataPath+'Data/embeddings.json', 'r') as f:
     text_emb_dict = json.load(f)
 
-with open("tData/userList.txt", "r") as f:
+with open('./'+dataPath+'Data/userList.txt', "r") as f:
     x = f.readlines()[0]
     user_list = re.findall(r"['\'](.*?)['\']", str(x))
 
-train_file = './tData/train.csv'
-valid_file = './tData/valid.csv'
-test_file = './tData/test.csv'
+train_file = './'+dataPath+'Data/train.csv'
+valid_file = './'+dataPath+'Data/valid.csv'
+test_file = './'+dataPath+'Data/test.csv'
 
 
 def cal_all_pair():
@@ -294,7 +299,7 @@ def cal_all_pair():
 
     # train the model
     model.train()
-    epoch = 1
+    epoch = 20
 
     for epoch in range(epoch):
         for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
@@ -333,11 +338,11 @@ def cal_all_pair():
     # evaluation
 
     model.eval()
-    fr = open("./tBertMlp/testBertMlp.dat", 'r')
-    fw = open("./tBertMlp/testBertMlp2.dat", 'w')
+    fr = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
+    fw = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./tBertMlp/preBertMlp.txt', "a")
+    preF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
     last_user = lines[0][6:]
     for i in tqdm(range(len(test_dataset))):
         line = lines[i]
