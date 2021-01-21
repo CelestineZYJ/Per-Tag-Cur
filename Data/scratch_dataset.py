@@ -81,3 +81,23 @@ class ScratchDataset(torch.utils.data.Dataset):
 
     def load_tensor_dict(self):
         raise NotImplementedError
+
+
+def my_collate(batch):
+    user_features, hashtag_features, labels = [], [], []
+    user_len, hashtag_len = [], []
+    batch_size = len(batch)
+    for user_feature, hashtag_feature, label in batch:
+        user_features.append(user_feature)
+        hashtag_features.append(hashtag_feature)
+        labels.append(label)
+        user_len.append(user_feature.shape[0])
+        hashtag_len.append(hashtag_feature.shape[0])
+    max_user_len, max_hashtag_len = max(user_len), max(hashtag_len)
+    for i in range(batch_size):
+        user_feature, hashtag_feature = user_features[i], hashtag_features[i]
+        user_features[i] = torch.cat((user_feature, torch.zeros(max_user_len-len(user_feature), 768)), dim=0)
+        hashtag_features[i] = torch.cat((hashtag_feature, torch.zeros(max_hashtag_len-len(hashtag_feature), 768)), dim=0)
+    user_features, hashtag_features = torch.stack(user_features), torch.stack(hashtag_features)
+    user_len, hashtag_len, labels = torch.tensor(user_len), torch.tensor(hashtag_len), torch.tensor(labels)
+    return user_features, user_len, hashtag_features, hashtag_len, labels
