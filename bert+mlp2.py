@@ -299,8 +299,7 @@ def cal_all_pair():
     weights = torch.Tensor([1, 5])
     # optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=3, threshold=1e-4, min_lr=1e-5)
 
     if torch.cuda.is_available():
         model = model.cuda()
@@ -378,7 +377,7 @@ def cal_all_pair():
 
         print('valid positive_acc: %f   valid negative_acc: %f     valid_loss: %f' % \
               ((num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(valid_dataset))))
-
+        scheduler.step(total_loss / len(valid_dataset))
     # evaluation
     model.eval()
     fr = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
