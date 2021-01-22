@@ -264,14 +264,11 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
                     labelF.write(f"{1} qid:{index}\n")
-                # for hashtag2 in neg_hashtag:
-                #     self.user_hashtag.append((user, hashtag2))
-                #     self.label.append(0)
-                #     labelF.write(f"{0} qid:{index}\n")
                     for i in range(100):
                         j = np.random.randint(len(neg_hashtag))
                         self.user_hashtag.append((user, neg_hashtag[j]))
                         self.label.append(0)
+                        labelF.write(f"{0} qid:{index}\n")
             labelF.close()
 
     def load_tensor_dict(self):
@@ -296,22 +293,22 @@ def cal_all_pair():
     valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
-    train_dataloader = data.DataLoader(train_dataset, batch_size=256, shuffle=True, collate_fn=my_collate, num_workers=0)
-    valid_dataloader = data.DataLoader(valid_dataset, batch_size=1024, collate_fn=my_collate, num_workers=0)
+    train_dataloader = data.DataLoader(train_dataset, batch_size=256, shuffle=True, collate_fn=my_collate, num_workers=8)
+    valid_dataloader = data.DataLoader(valid_dataset, batch_size=1024, collate_fn=my_collate, num_workers=8)
     # model, criterion, optimizer
     model = Mlp(768, 256)
     # criterion = torch.nn.BCELoss()
-    weights = torch.Tensor([1, 8])
+    weights = torch.Tensor([1, 5])
     # optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=3, threshold=1e-4, min_lr=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.008)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=5, threshold=1e-4, min_lr=1e-5)
 
     if torch.cuda.is_available():
         model = model.cuda()
         weights = weights.cuda()
 
     # train the model
-    epoch = 40
+    epoch = 60
 
     for epoch in range(epoch):
         num_positive, num_negative = 0., 0.
