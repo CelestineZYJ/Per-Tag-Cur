@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from Data.scratch_dataset import my_collate
+from Modules.utils import weighted_class_bceloss
 import torch.utils.data as data
 
 # print(torch.cuda.is_available())
@@ -290,12 +291,14 @@ def cal_all_pair():
     train_dataloader = data.DataLoader(train_dataset, batch_size=512, shuffle=True, collate_fn=my_collate, num_workers=0)
     # model, criterion, optimizer
     model = Mlp(768, 30)
-    criterion = torch.nn.BCELoss()
+    # criterion = torch.nn.BCELoss()
+    weights = torch.Tensor([1, 100])
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
     if torch.cuda.is_available():
-        model.cuda()
+        model = model.cuda()
+        weights = weights.cuda()
 
     # train the model
     model.train()
@@ -317,7 +320,7 @@ def cal_all_pair():
             pred_labels = model('Train', train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens)
 
             # compute loss
-            loss = criterion(pred_labels, labels.reshape(-1, 1))
+            loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
 
             #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
