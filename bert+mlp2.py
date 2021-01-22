@@ -288,12 +288,14 @@ def cal_all_pair():
     #valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
-    train_dataloader = data.DataLoader(train_dataset, batch_size=512, shuffle=True, collate_fn=my_collate, num_workers=0)
+    train_dataloader = data.DataLoader(train_dataset, batch_size=256, shuffle=True, collate_fn=my_collate, num_workers=0)
     # model, criterion, optimizer
-    model = Mlp(768, 30)
+    model = Mlp(768, 256)
     # criterion = torch.nn.BCELoss()
-    weights = torch.Tensor([1, 100])
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
+    weights = torch.Tensor([1, 5])
+    # optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr = 0.001)
+
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
     if torch.cuda.is_available():
@@ -302,9 +304,12 @@ def cal_all_pair():
 
     # train the model
     model.train()
-    epoch = 30
+    epoch = 10
 
     for epoch in range(epoch):
+        num_positive, num_negative = 0., 0.
+        num_correct_positive, num_correct_negative = 0, 0
+
         for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
             if torch.cuda.is_available():
                 train_user_features = train_user_features.cuda()
@@ -322,6 +327,16 @@ def cal_all_pair():
             # compute loss
             loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
 
+            for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
+                if label == 1:
+                    num_positive += 1
+                    if pred_label > 0.5:
+                        num_correct_positive += 1
+                else:
+                    num_negative += 1
+                    if pred_label < 0.5:
+                        num_correct_negative += 1
+
             #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
             # backward pass
@@ -337,6 +352,7 @@ def cal_all_pair():
             #     scheduler.step(val_loss)
             # except:
             #     pass
+        print('positive_acc: %f    negative_acc: %f' % ((num_correct_positive / num_positive), (num_correct_negative / num_negative)))
 
     # evaluation
     model.eval()
@@ -373,7 +389,7 @@ def cal_all_pair():
 
         pred_label = pred_label.cpu().detach().numpy().tolist()[0]
         preF.write(f"{pred_label}\n")
-        after_train = criterion(pred_label, test_label)
+        # after_train = criterion(pred_label, test_label)
         print("test loss after train", after_train.item())
 
     preF.close()
