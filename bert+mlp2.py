@@ -242,14 +242,15 @@ class ScratchDataset(torch.utils.data.Dataset):
         if self.data_split == 'Valid':
             for user in self.user_list:
                 pos_hashtag = list(set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
-                neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(
-                    self.train_hashtag_per_user[user]))
+                neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
+                num = len(neg_hashtag)
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
-                for hashtag2 in neg_hashtag:
-                    self.user_hashtag.append((user, hashtag2))
-                    self.label.append(0)
+                    for i in range(self.neg_sampling):
+                        j = np.random.randint(num)
+                        self.user_hashtag.append((user, neg_hashtag[j]))
+                        self.label.append(0)
         if self.data_split == 'Test':
             labelF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
             for index, user in enumerate(self.user_list):
@@ -285,16 +286,17 @@ test_file = './'+dataPath+'Data/test.csv'
 
 def cal_all_pair():
     train_dataset = ScratchDataset(data_split='Train', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
-    #valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
+    valid_dataset = ScratchDataset(data_split='Valid', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
     train_dataloader = data.DataLoader(train_dataset, batch_size=256, shuffle=True, collate_fn=my_collate, num_workers=0)
+    valid_dataloader = data.DataLoader(valid_dataset, batch_size=1024, collate_fn=my_collate, num_workers=0)
     # model, criterion, optimizer
     model = Mlp(768, 256)
     # criterion = torch.nn.BCELoss()
     weights = torch.Tensor([1, 5])
     # optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
-    optimizer = torch.optim.Adam(model.parameters(), lr = 0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5000, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
@@ -303,13 +305,13 @@ def cal_all_pair():
         weights = weights.cuda()
 
     # train the model
-    model.train()
     epoch = 10
 
     for epoch in range(epoch):
         num_positive, num_negative = 0., 0.
         num_correct_positive, num_correct_negative = 0, 0
 
+        model.train()
         for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
             if torch.cuda.is_available():
                 train_user_features = train_user_features.cuda()
@@ -337,22 +339,36 @@ def cal_all_pair():
                     if pred_label < 0.5:
                         num_correct_negative += 1
 
-            #print("Epoch {}: train loss: {}".format(epoch, loss.item()))
-
             # backward pass
             loss.backward()
             optimizer.step()
 
-            # # validate process----------------------------------
-            # try:
-            #     valid_user_feature, valid_hashtag_feature, valid_label = valid_dataset[i]
-            #     optimizer.zero_grad()
-            #     pred_label = model(valid_user_feature, valid_hashtag_feature)
-            #     val_loss = criterion(pred_label, valid_label)
-            #     scheduler.step(val_loss)
-            # except:
-            #     pass
-        print('positive_acc: %f    negative_acc: %f' % ((num_correct_positive / num_positive), (num_correct_negative / num_negative)))
+        print('train positive_acc: %f    train negative_acc: %f' % ((num_correct_positive / num_positive), (num_correct_negative / num_negative)))
+
+        num_positive, num_negative = 0., 0.
+        num_correct_positive, num_correct_negative = 0, 0
+        model.eval()
+        with torch.no_grad():
+            for user_features, user_lens, hashtag_features, hashtag_lens, labels in tqdm(valid_dataloader):
+                if torch.cuda.is_available():
+                    user_features = user_features.cuda()
+                    user_lens = user_lens.cuda()
+                    hashtag_features = hashtag_features.cuda()
+                    hashtag_lens = hashtag_lens.cuda()
+                    labels = labels.cuda()
+                pred_labels = model('Train', user_features, user_lens, hashtag_features, hashtag_lens)
+
+                for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
+                    if label == 1:
+                        num_positive += 1
+                        if pred_label > 0.5:
+                            num_correct_positive += 1
+                    else:
+                        num_negative += 1
+                        if pred_label < 0.5:
+                            num_correct_negative += 1
+
+        print('valid positive_acc: %f   valid negative_acc: %f' % ((num_correct_positive / num_positive), (num_correct_negative / num_negative)))
 
     # evaluation
     model.eval()
@@ -390,7 +406,7 @@ def cal_all_pair():
         pred_label = pred_label.cpu().detach().numpy().tolist()[0]
         preF.write(f"{pred_label}\n")
         # after_train = criterion(pred_label, test_label)
-        print("test loss after train", after_train.item())
+        # print("test loss after train", after_train.item())
 
     preF.close()
 
