@@ -129,6 +129,8 @@ class ScratchDataset(torch.utils.data.Dataset):
 
             for text in list(set(self.valid_text_per_hashtag[hashtag]) - set(self.valid_text_per_user[user])):
                 hashtag_feature.append(self.get_feature(self.dict, text))
+            if len(hashtag_feature) == 0:
+                hashtag_feature.append([0.] * 768)
 
         if self.data_split == 'Test':
             try:
@@ -310,6 +312,7 @@ def cal_all_pair():
     for epoch in range(epoch):
         num_positive, num_negative = 0., 0.
         num_correct_positive, num_correct_negative = 0, 0
+        total_loss = 0.
 
         model.train()
         for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
@@ -328,6 +331,7 @@ def cal_all_pair():
 
             # compute loss
             loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
+            total_loss += (loss.item() * len(labels))
 
             for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
                 if label == 1:
@@ -343,10 +347,13 @@ def cal_all_pair():
             loss.backward()
             optimizer.step()
 
-        print('train positive_acc: %f    train negative_acc: %f' % ((num_correct_positive / num_positive), (num_correct_negative / num_negative)))
+        print('train positive_acc: %f    train negative_acc: %f    train_loss: %f' % \
+              ((num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(train_dataset))))
 
         num_positive, num_negative = 0., 0.
         num_correct_positive, num_correct_negative = 0, 0
+        total_loss = 0.
+
         model.eval()
         with torch.no_grad():
             for user_features, user_lens, hashtag_features, hashtag_lens, labels in tqdm(valid_dataloader):
@@ -357,7 +364,8 @@ def cal_all_pair():
                     hashtag_lens = hashtag_lens.cuda()
                     labels = labels.cuda()
                 pred_labels = model('Train', user_features, user_lens, hashtag_features, hashtag_lens)
-
+                loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
+                total_loss += (loss.item() * len(labels))
                 for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
                     if label == 1:
                         num_positive += 1
@@ -368,7 +376,8 @@ def cal_all_pair():
                         if pred_label < 0.5:
                             num_correct_negative += 1
 
-        print('valid positive_acc: %f   valid negative_acc: %f' % ((num_correct_positive / num_positive), (num_correct_negative / num_negative)))
+        print('valid positive_acc: %f   valid negative_acc: %f     valid_loss: %f' % \
+              ((num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(valid_dataset))))
 
     # evaluation
     model.eval()
