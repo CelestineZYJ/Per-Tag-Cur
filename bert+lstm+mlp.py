@@ -9,8 +9,10 @@ import re
 from tqdm import tqdm
 
 
-modelPath = 'demoLstm'
-dataPath = 'demo'
+dataPath = 'trec'
+encoderPath = 'Bert'
+secondLayer = 'Lstm'
+classifierPath = 'Mlp'
 
 
 def get_hashtag(content):
@@ -116,11 +118,10 @@ def read_embedding(train_df):
 
     # 读userlist，要灵活调换写与读以保持与其他实验的统一
     '''
-    with open(dataPath+"/userList.txt", "r") as f:
+    with open('./'+dataPath+'Data/userList.txt', 'r') as f:
         x = f.readlines()[0]
         #print(x)
         user_list = get_hashtag(x)
-        print(user_list)
 
     train_content_user_df = train_df.groupby(['user_id'], as_index=False).agg({'content': lambda x: list(x)})
     train_content_tag_df = train_df.explode('hashtag').groupby(['hashtag'], as_index=False).agg({'content': lambda x: list(x)})
@@ -131,13 +132,12 @@ def read_embedding(train_df):
     return user_list, train_content_user_df, train_content_tag_df
 
 
-with open('./'+dataPath+'/embeddings.json', 'r') as f:
+with open('./'+dataPath+'Data/embeddings.json', 'r') as f:
     con_emb_dict = json.load(f)
 
-train_df = pd.read_table('./'+dataPath+'/train.csv')
-test_df = pd.read_table('./'+dataPath+'/test.csv')
-valid_df = pd.read_table('./'+dataPath+'/validation.csv')
-embedSet = pd.read_table('./'+dataPath+'/embed.csv')
+train_df = pd.read_table('./'+dataPath+'Data/train.csv')
+test_df = pd.read_table('./'+dataPath+'Data/test.csv')
+valid_df = pd.read_table('./'+dataPath+'Data/valid.csv')
 
 # 这几个get_str是为了应对中文数据集经常读出来非str的问题，跑trec的时候注释掉这几句，不然会报错，原因待调查
 train_df['user_id'] = train_df['user_id'].apply(get_str)
@@ -150,14 +150,8 @@ train_df['hashtag'] = train_df['hashtag'].apply(get_hashtag)
 test_df['hashtag'] = test_df['hashtag'].apply(get_hashtag)
 valid_df['hashtag'] = valid_df['hashtag'].apply(get_hashtag)
 
-embedSet['user_id'] = embedSet['user_id'].apply(get_str)
-embedSet['content'] = embedSet['content'].apply(get_str)
-embedSet['hashtag'] = embedSet['hashtag'].apply(get_hashtag)
-embedSet['time'] = embedSet['time'].apply(get_str)
-
 user_list, train_content_user_df, train_content_tag_df = read_embedding(train_df)
 
-embed_tag_list, qid_embed_dict = sort_embed_user_tag(user_list, embedSet[embedSet.time < '20200601'])  # trec 20110201
 train_tag_list, qid_train_dict = sort_train_user_tag(user_list, train_df)
 valid_tag_list, qid_valid_dict = sort_valid_user_tag(user_list, valid_df)
 test_tag_list, qid_test_dict = sort_test_user_tag(user_list, test_df)
@@ -176,22 +170,22 @@ class LstmMlp(torch.nn.Module):
         self.relu = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(self.hidden_size, 1)
         self.sigmoid = torch.nn.Sigmoid()
+        self.lstm = torch.nn.LSTM(self.input_size, self.input_size)
 
     def forward(self, x):
         # user modeling: calculate user embedding
-        lstm = torch.nn.LSTM(self.input_size, self.input_size)
         lstm_inputs = []
         content_list = train_content_user_df['content'].loc[(train_content_user_df['user_id']) == self.user_id].tolist()[0]
         for content in content_list:
             lstm_inputs.append(torch.tensor(content_embedding(content, con_emb_dict)))
 
-        lstm_output, lstm_hidden = lstm(lstm_inputs[0].view(1, 1, -1))
+        lstm_output, lstm_hidden = self.lstm(lstm_inputs[0].view(1, 1, -1))
         for i in lstm_inputs[:-1]:
             # Step through the sequence one element at a time.
             # after each step, hidden contains the hidden state.
-            lstm_output, lstm_hidden = lstm(i.view(1, 1, -1), lstm_hidden)
+            lstm_output, lstm_hidden = self.lstm(i.view(1, 1, -1), lstm_hidden)
 
-        lstm_output, lstm_hidden = lstm(lstm_inputs[-1].view(1, 1, -1), lstm_hidden)
+        lstm_output, lstm_hidden = self.lstm(lstm_inputs[-1].view(1, 1, -1), lstm_hidden)
 
         user_arr = lstm_output.detach().numpy()[0][0]  # lstm_output is user modeling
         #print(user_arr)
@@ -304,10 +298,10 @@ class LstmMlp(torch.nn.Module):
             mlp_label = torch.FloatTensor(label_valid)
 
         if x == "test":
-            testF = open('./'+modelPath+'/testBertLstmMlp.dat', "a")
-            testF.write(f"# query {self.user_num + 1}")
+            # testF = open('./'+modelPath+'/testBertLstmMlp.dat', "a")
+            # testF.write(f"# query {self.user_num + 1}")
 
-            testF2 = open('./'+modelPath+'/testBertLstmMlp2.dat', "a")
+            testF2 = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', "a")
             testF2.write(f"# query {self.user_num + 1}")
 
             feature_test = []
@@ -327,7 +321,7 @@ class LstmMlp(torch.nn.Module):
                 if len(x) != 0:
                     content_list += x[0]  # tag list of test part
                 if len(content_list) == 0:
-                    print("test positive")
+                    #print("test positive")
                     continue
                 for content in content_list:
                     embed_list.append(content_embedding(content, con_emb_dict))
@@ -342,12 +336,19 @@ class LstmMlp(torch.nn.Module):
                 Str = f"\n{x} {'qid'}:{self.user_num + 1}"
                 testF2.write(Str)
 
-                for index, value in enumerate(user_tag_arr):
-                    Str += f" {index + 1}:{value}"
-                testF.write(Str)
+                # for index, value in enumerate(user_tag_arr):
+                #     Str += f" {index + 1}:{value}"
+                # testF.write(Str)
 
             # negative samples
-            negative_tag_list = list(set(test_tag_list) - set(positive_tag_list)-set(qid_train_dict[self.user_id]))
+            temp_tag_list = list(set(test_tag_list) - set(positive_tag_list) - set(qid_train_dict[self.user_id]))
+            try:
+                if len(positive_tag_list) - i == 0:
+                    negative_tag_list = temp_tag_list
+                else:
+                    negative_tag_list = random.sample(temp_tag_list, 100 * (len(positive_tag_list) - i))
+            except:
+                negative_tag_list = temp_tag_list
             for tag in negative_tag_list:  # negative samples
                 # cal tag_arr by hashtag embedding
                 embed_list = []
@@ -376,13 +377,13 @@ class LstmMlp(torch.nn.Module):
                 Str = f"\n{x} {'qid'}:{self.user_num + 1}"
                 testF2.write(Str)
 
-                for index, value in enumerate(user_tag_arr):
-                    Str += f" {index + 1}:{value}"
-                testF.write(Str)
+                # for index, value in enumerate(user_tag_arr):
+                #     Str += f" {index + 1}:{value}"
+                # testF.write(Str)
 
-            testF.write("\n")
+            # testF.write("\n")
             testF2.write("\n")
-            testF.close()
+            # testF.close()
             testF2.close()
 
             #print(feature_test[0])
@@ -408,7 +409,7 @@ class LstmMlp(torch.nn.Module):
 
 def all_user():
     user_num = 0
-    for user_id in tqdm(user_list[:100]):
+    for user_id in tqdm(user_list):
         try:
             each_user(user_num, user_id)
         except:
@@ -418,9 +419,9 @@ def all_user():
 
 def each_user(user_num, user_id):
     # model, criterion, optimizer
-    model = LstmMlp(user_num, user_id, 768, 30)
+    model = LstmMlp(user_num, user_id, 768, 64)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.22)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.125)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, threshold=0.0001, threshold_mode='rel', cooldown=0, verbose=True)
 
     '''
@@ -432,7 +433,7 @@ def each_user(user_num, user_id):
     '''
     # train the model
     model.train()
-    epoch = 90
+    epoch = 1000
 
     for epoch in range(epoch):
         # train process-----------------------------------
@@ -443,6 +444,8 @@ def each_user(user_num, user_id):
 
         # compute loss
         loss = criterion(label_pred.squeeze(), label_train)
+
+        print("Epoch {}: train loss: {}".format(epoch, loss.item()))
 
         # backward pass
         loss.backward()
@@ -458,7 +461,7 @@ def each_user(user_num, user_id):
     model.eval()
     label_pred, label_test = model("test")
 
-    preF = open(modelPath+'/preBertLstmMlp.txt', "a")
+    preF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
     #preF.write(f"# query {user_num + 1}\n")
     spe_user_pre = label_pred.detach().numpy().tolist()
     for tag_pre in spe_user_pre:
