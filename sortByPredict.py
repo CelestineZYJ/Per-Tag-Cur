@@ -2,11 +2,11 @@ import pandas as pd
 from tqdm import tqdm
 from operator import itemgetter
 from tqdm import tqdm
-
+import ast
 def sort(test,predict_scores,sorted_test_path):
     test = test.readlines()
     scores = predict_scores.readlines()
-
+    scores = [float(ast.literal_eval(score.strip('\n'))) for score in scores]
     data = dict()
     key = test[0]
     value = []
