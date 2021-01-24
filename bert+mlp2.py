@@ -9,13 +9,15 @@ from Data.scratch_dataset import my_collate
 from Modules.utils import weighted_class_bceloss
 import torch.utils.data as data
 
-# print(torch.cuda.is_available())
-# print(print(torch.__version__))
+torch.manual_seed(2021)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(2021)
 
-dataPath = 'yuji'
+dataPath = 't'
 encoderPath = 'Bert'
 secondLayer = ''
 classifierPath = 'Mlp'
+exp_name = 'twitter_baseline_lstm'
 
 
 class Mlp(torch.nn.Module):
@@ -24,10 +26,10 @@ class Mlp(torch.nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.relu = torch.nn.ReLU()
-        self.fc1 = torch.nn.Linear(self.input_size * 2, self.input_size)
-        self.bn1 = torch.nn.BatchNorm1d(num_features=self.input_size)
-        self.fc2 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.bn2 = torch.nn.BatchNorm1d(num_features=self.hidden_size)
+        self.fc1 = torch.nn.Linear(self.input_size * 2, self.hidden_size)
+        self.bn1 = torch.nn.BatchNorm1d(num_features=self.hidden_size)
+        # self.fc2 = torch.nn.Linear(self.input_size, self.hidden_size)
+        # self.bn2 = torch.nn.BatchNorm1d(num_features=self.hidden_size)
         self.fc3 = torch.nn.Linear(self.hidden_size, 1)
         self.lstm = torch.nn.LSTM(768, 768)
         self.sigmoid = torch.nn.Sigmoid()
@@ -39,26 +41,26 @@ class Mlp(torch.nn.Module):
             x = torch.cat((user_embeds, hashtag_embeds), dim=1)
 
         if sign == 'Test':
-            user_modeling = torch.mean(user_features, 0)
-            hashtag_modeling = torch.mean(hashtag_features, 0)
-            x = torch.cat((user_modeling, hashtag_modeling), 0)
+            user_modeling = torch.mean(user_features, 0).reshape(1, -1)
+            hashtag_modeling = torch.mean(hashtag_features, 0).reshape(1, -1)
+            x = torch.cat((user_modeling, hashtag_modeling), dim=1)
 
         x = self.relu(self.bn1(self.fc1(x)))
-        x = self.relu(self.bn2(self.fc2(x)))
+        # x = self.relu(self.bn2(self.fc2(x)))
         output = self.fc3(x)
 
         output = self.sigmoid(output)
         return output
 
     def user_modeling(self, user_features, user_lens):
-        # inputs = torch.nn.utils.rnn.pack_padded_sequence(user_features, user_lens, batch_first=True, enforce_sorted=False)
-        # _, (h, _) = self.lstm(inputs)
-        # return h[-1]
-        outputs = []
-        for user_feature, user_len in zip(user_features, user_lens):
-            outputs.append(torch.mean(user_feature[:user_len.item()], dim=0))
-        outputs = torch.stack(outputs)
-        return outputs
+        inputs = torch.nn.utils.rnn.pack_padded_sequence(user_features, user_lens, batch_first=True, enforce_sorted=False)
+        _, (h, _) = self.lstm(inputs)
+        return h[-1]
+        # outputs = []
+        # for user_feature, user_len in zip(user_features, user_lens):
+        #     outputs.append(torch.mean(user_feature[:user_len.item()], dim=0))
+        # outputs = torch.stack(outputs)
+        # return outputs
 
     def hashtag_modeling(self, hashtag_features, hashtag_lens):
         outputs = []
@@ -166,7 +168,7 @@ class ScratchDataset(torch.utils.data.Dataset):
 
     # cal user modeling and hashtag modeling
     def process_data_file(self):
-        with open('/home/yjzhang/Per-Tag-Cur/yujiData/hashtag_split_trec_update.csv') as f:
+        with open('/home/yjzhang/Per-Tag-Cur/tData/hashtag_split_twitter_update.csv') as f:
             for line in f:
                 l = line.strip('\n').strip('\t').split('\t')
                 self.hashtag_split[l[0]] = l[1:]
@@ -249,12 +251,12 @@ class ScratchDataset(torch.utils.data.Dataset):
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
-                    for i in range(self.neg_sampling):
+                    for i in range(100):
                         j = np.random.randint(num)
                         self.user_hashtag.append((user, neg_hashtag[j]))
                         self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
+            labelF = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -274,7 +276,7 @@ class ScratchDataset(torch.utils.data.Dataset):
 
 
 # read files
-with open('./'+dataPath+'Data/embed.json', 'r') as f:
+with open('./'+dataPath+'Data/embeddings.json', 'r') as f:
     text_emb_dict = json.load(f)
 
 with open('./'+dataPath+'Data/userList.txt', "r") as f:
@@ -292,7 +294,7 @@ def cal_all_pair():
     test_dataset = ScratchDataset(data_split='Test', user_list=user_list, train_file=train_file, valid_file=valid_file, test_file=test_file, dict=text_emb_dict)
 
     train_dataloader = data.DataLoader(train_dataset, batch_size=256, shuffle=True, collate_fn=my_collate, num_workers=8)
-    valid_dataloader = data.DataLoader(valid_dataset, batch_size=256, collate_fn=my_collate, num_workers=8)
+    valid_dataloader = data.DataLoader(valid_dataset, batch_size=512, collate_fn=my_collate, num_workers=8)
     # model, criterion, optimizer
     model = Mlp(768, 256)
     # criterion = torch.nn.BCELoss()
@@ -306,7 +308,9 @@ def cal_all_pair():
         weights = weights.cuda()
 
     # train the model
-    epoch = 30
+    epoch = 20
+    best_valid_loss = 1e10
+    best_epoch = -1
 
     for epoch in range(epoch):
         num_positive, num_negative = 0., 0.
@@ -353,6 +357,10 @@ def cal_all_pair():
         num_correct_positive, num_correct_negative = 0, 0
         total_loss = 0.
 
+        # best_model = Mlp(768, 256)
+        # best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/model_9.pt'))
+        # if torch.cuda.is_available():
+        #     best_model = best_model.cuda()
         model.eval()
         with torch.no_grad():
             for user_features, user_lens, hashtag_features, hashtag_lens, labels in tqdm(valid_dataloader):
@@ -375,17 +383,29 @@ def cal_all_pair():
                         if pred_label < 0.5:
                             num_correct_negative += 1
 
-        print('valid positive_acc: %f   valid negative_acc: %f     valid_loss: %f' % \
-              ((num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(valid_dataset))))
+        print('epoch: %d      valid positive_acc: %f   valid negative_acc: %f     valid_loss: %f' % \
+              ((epoch + 1), (num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(valid_dataset))))
         scheduler.step(total_loss / len(valid_dataset))
         print('learning rate:  %f' % optimizer.param_groups[0]['lr'])
-    # evaluation
-    model.eval()
-    fr = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
-    fw = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', 'w')
+
+        if total_loss < best_valid_loss:
+            best_valid_loss = total_loss
+            best_epoch = epoch
+            print('Current best!')
+            torch.save(model.state_dict(), f'/home/yjzhang/exp/{exp_name}/best_model.pt')
+        torch.save(model.state_dict(), f'/home/yjzhang/exp/{exp_name}/model_{epoch}.pt')
+
+    # test
+    best_model = Mlp(768, 256)
+    best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/model_{best_epoch}.pt'))
+    if torch.cuda.is_available():
+        best_model = best_model.cuda()
+    best_model.eval()
+    fr = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
+    fw = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
+    preF = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
     last_user = lines[0][6:]
     print('# query 0', file=fw)
     with torch.no_grad():
@@ -404,7 +424,7 @@ def cal_all_pair():
                 last_user = user
 
             try:
-                pred_label = model('Test', test_user_feature, 0, test_hashtag_feature, 0)
+                pred_label = best_model('Test', test_user_feature, 0, test_hashtag_feature, 0)
                 print(line, file=fw)
             except:
                 print("no test")
