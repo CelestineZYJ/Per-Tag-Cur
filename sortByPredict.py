@@ -6,7 +6,7 @@ import ast
 def sort(test,predict_scores,sorted_test_path):
     test = test.readlines()
     scores = predict_scores.readlines()
-    scores = [float(ast.literal_eval(score.strip('\n'))) for score in scores]
+    scores = [float(line.strip('\n').strip('[').strip(']')) for line in scores]
     data = dict()
     key = test[0]
     value = []
