@@ -17,7 +17,7 @@ dataPath = 't'
 encoderPath = 'Bert'
 secondLayer = ''
 classifierPath = 'Mlp'
-exp_name = 'twitter_baseline_lstm'
+exp_name = 'twitter_baseline_mlp'
 
 
 class Mlp(torch.nn.Module):
@@ -53,14 +53,14 @@ class Mlp(torch.nn.Module):
         return output
 
     def user_modeling(self, user_features, user_lens):
-        inputs = torch.nn.utils.rnn.pack_padded_sequence(user_features, user_lens, batch_first=True, enforce_sorted=False)
-        _, (h, _) = self.lstm(inputs)
-        return h[-1]
-        # outputs = []
-        # for user_feature, user_len in zip(user_features, user_lens):
-        #     outputs.append(torch.mean(user_feature[:user_len.item()], dim=0))
-        # outputs = torch.stack(outputs)
-        # return outputs
+        # inputs = torch.nn.utils.rnn.pack_padded_sequence(user_features, user_lens, batch_first=True, enforce_sorted=False)
+        # _, (h, _) = self.lstm(inputs)
+        # return h[-1]
+        outputs = []
+        for user_feature, user_len in zip(user_features, user_lens):
+            outputs.append(torch.mean(user_feature[:user_len.item()], dim=0))
+        outputs = torch.stack(outputs)
+        return outputs
 
     def hashtag_modeling(self, hashtag_features, hashtag_lens):
         outputs = []
@@ -256,7 +256,7 @@ class ScratchDataset(torch.utils.data.Dataset):
                         self.user_hashtag.append((user, neg_hashtag[j]))
                         self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
+            labelF = open(f'/home/yjzhang/exp/{exp_name}/inference100'+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -265,10 +265,18 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
                     labelF.write(f"{1} qid:{index}\n")
-                for hashtag2 in neg_hashtag:
-                    self.user_hashtag.append((user, hashtag2))
+
+                num = len(neg_hashtag)
+                for i in range(len(pos_hashtag) * 100):
+                    j = np.random.randint(num)
+                    self.user_hashtag.append((user, neg_hashtag[j]))
                     self.label.append(0)
                     labelF.write(f"{0} qid:{index}\n")
+
+                # for hashtag2 in neg_hashtag:
+                #     self.user_hashtag.append((user, hashtag2))
+                #     self.label.append(0)
+                #     labelF.write(f"{0} qid:{index}\n")
             labelF.close()
 
     def load_tensor_dict(self):
@@ -312,100 +320,101 @@ def cal_all_pair():
     best_valid_loss = 1e10
     best_epoch = -1
 
-    for epoch in range(epoch):
-        num_positive, num_negative = 0., 0.
-        num_correct_positive, num_correct_negative = 0, 0
-        total_loss = 0.
-
-        model.train()
-        for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
-            if torch.cuda.is_available():
-                train_user_features = train_user_features.cuda()
-                train_user_lens = train_user_lens.cuda()
-                train_hashtag_features = train_hashtag_features.cuda()
-                train_hashtag_lens = train_hashtag_lens.cuda()
-                labels = labels.cuda()
-
-            # train process-----------------------------------
-            optimizer.zero_grad()
-
-            # forward pass
-            pred_labels = model('Train', train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens)
-
-            # compute loss
-            loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
-            total_loss += (loss.item() * len(labels))
-
-            for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
-                if label == 1:
-                    num_positive += 1
-                    if pred_label > 0.5:
-                        num_correct_positive += 1
-                else:
-                    num_negative += 1
-                    if pred_label < 0.5:
-                        num_correct_negative += 1
-
-            # backward pass
-            loss.backward()
-            optimizer.step()
-
-        print('train positive_acc: %f    train negative_acc: %f    train_loss: %f' % \
-              ((num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(train_dataset))))
-
-        num_positive, num_negative = 0., 0.
-        num_correct_positive, num_correct_negative = 0, 0
-        total_loss = 0.
-
-        # best_model = Mlp(768, 256)
-        # best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/model_9.pt'))
-        # if torch.cuda.is_available():
-        #     best_model = best_model.cuda()
-        model.eval()
-        with torch.no_grad():
-            for user_features, user_lens, hashtag_features, hashtag_lens, labels in tqdm(valid_dataloader):
-                if torch.cuda.is_available():
-                    user_features = user_features.cuda()
-                    user_lens = user_lens.cuda()
-                    hashtag_features = hashtag_features.cuda()
-                    hashtag_lens = hashtag_lens.cuda()
-                    labels = labels.cuda()
-                pred_labels = model('Train', user_features, user_lens, hashtag_features, hashtag_lens)
-                loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
-                total_loss += (loss.item() * len(labels))
-                for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
-                    if label == 1:
-                        num_positive += 1
-                        if pred_label > 0.5:
-                            num_correct_positive += 1
-                    else:
-                        num_negative += 1
-                        if pred_label < 0.5:
-                            num_correct_negative += 1
-
-        print('epoch: %d      valid positive_acc: %f   valid negative_acc: %f     valid_loss: %f' % \
-              ((epoch + 1), (num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(valid_dataset))))
-        scheduler.step(total_loss / len(valid_dataset))
-        print('learning rate:  %f' % optimizer.param_groups[0]['lr'])
-
-        if total_loss < best_valid_loss:
-            best_valid_loss = total_loss
-            best_epoch = epoch
-            print('Current best!')
-            torch.save(model.state_dict(), f'/home/yjzhang/exp/{exp_name}/best_model.pt')
-        torch.save(model.state_dict(), f'/home/yjzhang/exp/{exp_name}/model_{epoch}.pt')
+    # for epoch in range(epoch):
+    #     num_positive, num_negative = 0., 0.
+    #     num_correct_positive, num_correct_negative = 0, 0
+    #     total_loss = 0.
+    #
+    #     model.train()
+    #     for train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens, labels in tqdm(train_dataloader):
+    #         if torch.cuda.is_available():
+    #             train_user_features = train_user_features.cuda()
+    #             train_user_lens = train_user_lens.cuda()
+    #             train_hashtag_features = train_hashtag_features.cuda()
+    #             train_hashtag_lens = train_hashtag_lens.cuda()
+    #             labels = labels.cuda()
+    #
+    #         # train process-----------------------------------
+    #         optimizer.zero_grad()
+    #
+    #         # forward pass
+    #         pred_labels = model('Train', train_user_features, train_user_lens, train_hashtag_features, train_hashtag_lens)
+    #
+    #         # compute loss
+    #         loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
+    #         total_loss += (loss.item() * len(labels))
+    #
+    #         for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
+    #             if label == 1:
+    #                 num_positive += 1
+    #                 if pred_label > 0.5:
+    #                     num_correct_positive += 1
+    #             else:
+    #                 num_negative += 1
+    #                 if pred_label < 0.5:
+    #                     num_correct_negative += 1
+    #
+    #         # backward pass
+    #         loss.backward()
+    #         optimizer.step()
+    #
+    #     print('train positive_acc: %f    train negative_acc: %f    train_loss: %f' % \
+    #           ((num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(train_dataset))))
+    #
+    #     num_positive, num_negative = 0., 0.
+    #     num_correct_positive, num_correct_negative = 0, 0
+    #     total_loss = 0.
+    #
+    #     # best_model = Mlp(768, 256)
+    #     # best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/model_9.pt'))
+    #     # if torch.cuda.is_available():
+    #     #     best_model = best_model.cuda()
+    #     model.eval()
+    #     with torch.no_grad():
+    #         for user_features, user_lens, hashtag_features, hashtag_lens, labels in tqdm(valid_dataloader):
+    #             if torch.cuda.is_available():
+    #                 user_features = user_features.cuda()
+    #                 user_lens = user_lens.cuda()
+    #                 hashtag_features = hashtag_features.cuda()
+    #                 hashtag_lens = hashtag_lens.cuda()
+    #                 labels = labels.cuda()
+    #             pred_labels = model('Train', user_features, user_lens, hashtag_features, hashtag_lens)
+    #             loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
+    #             total_loss += (loss.item() * len(labels))
+    #             for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
+    #                 if label == 1:
+    #                     num_positive += 1
+    #                     if pred_label > 0.5:
+    #                         num_correct_positive += 1
+    #                 else:
+    #                     num_negative += 1
+    #                     if pred_label < 0.5:
+    #                         num_correct_negative += 1
+    #
+    #     print('epoch: %d      valid positive_acc: %f   valid negative_acc: %f     valid_loss: %f' % \
+    #           ((epoch + 1), (num_correct_positive / num_positive), (num_correct_negative / num_negative), (total_loss / len(valid_dataset))))
+    #     scheduler.step(total_loss / len(valid_dataset))
+    #     print('learning rate:  %f' % optimizer.param_groups[0]['lr'])
+    #
+    #     if total_loss < best_valid_loss:
+    #         best_valid_loss = total_loss
+    #         best_epoch = epoch
+    #         print('Current best!')
+    #         torch.save(model.state_dict(), f'/home/yjzhang/exp/{exp_name}/best_model.pt')
+    #     torch.save(model.state_dict(), f'/home/yjzhang/exp/{exp_name}/model_{epoch}.pt')
 
     # test
     best_model = Mlp(768, 256)
-    best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/model_{best_epoch}.pt'))
+    # best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/model_{best_epoch}.pt'))
+    best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/best_model.pt'))
     if torch.cuda.is_available():
         best_model = best_model.cuda()
     best_model.eval()
-    fr = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
-    fw = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', 'w')
+    fr = open(f'/home/yjzhang/exp/{exp_name}/inference100'+'/test'+encoderPath+secondLayer+classifierPath+'.dat', 'r')
+    fw = open(f'/home/yjzhang/exp/{exp_name}/inference100'+'/test'+encoderPath+secondLayer+classifierPath+'2.dat', 'w')
     lines = fr.readlines()
     lines = [line.strip() for line in lines if line[0] != '#']
-    preF = open(f'/home/yjzhang/exp/{exp_name}/inference'+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
+    preF = open(f'/home/yjzhang/exp/{exp_name}/inference100'+'/pre'+encoderPath+secondLayer+classifierPath+'.txt', "a")
     last_user = lines[0][6:]
     print('# query 0', file=fw)
     with torch.no_grad():
