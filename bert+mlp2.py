@@ -8,6 +8,7 @@ from tqdm import tqdm
 from Data.scratch_dataset import my_collate
 from Modules.utils import weighted_class_bceloss
 import torch.utils.data as data
+import torch.nn.functional as F
 from Modules.self_attention import MultiheadSelfAttention
 
 torch.manual_seed(2021)
@@ -18,7 +19,7 @@ dataPath = 't'
 encoderPath = 'Bert'
 secondLayer = ''
 classifierPath = 'Mlp'
-exp_name = 'twitter_baseline_attention'
+exp_name = 'twitter_baseline_attention_new'
 
 
 class Mlp(torch.nn.Module):
@@ -34,10 +35,11 @@ class Mlp(torch.nn.Module):
         self.fc3 = torch.nn.Linear(self.hidden_size, 1)
         self.lstm = torch.nn.LSTM(768, 768)
         self.sigmoid = torch.nn.Sigmoid()
+        self.attention = MultiheadSelfAttention(input_dim=768, embed_dim=768)
 
     def forward(self, sign, user_features, user_lens, hashtag_features, hashtag_lens):
         user_embeds = self.user_modeling(user_features, user_lens)
-        hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens)
+        hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens, user_embeds=user_embeds)
         x = torch.cat((user_embeds, hashtag_embeds), dim=1)
 
         x = self.relu(self.bn1(self.fc1(x)))
@@ -47,23 +49,30 @@ class Mlp(torch.nn.Module):
         output = self.sigmoid(output)
         return output
 
-    def user_modeling(self, user_features, user_lens, config='lstm'):
+    def user_modeling(self, user_features, user_lens, config='mean'):
         if config == 'lstm':
             inputs = torch.nn.utils.rnn.pack_padded_sequence(user_features, user_lens, batch_first=True, enforce_sorted=False)
             _, (h, _) = self.lstm(inputs)
             return h[-1]
-        else:
+        elif config == 'mean':
             outputs = []
             for user_feature, user_len in zip(user_features, user_lens):
                 outputs.append(torch.mean(user_feature[:user_len.item()], dim=0))
             outputs = torch.stack(outputs)
             return outputs
 
-    def hashtag_modeling(self, hashtag_features, hashtag_lens):
-        outputs = []
-        for hashtag_feature, hashtag_len in zip(hashtag_features, hashtag_lens):
-            outputs.append(torch.mean(hashtag_feature[:hashtag_len.item()], dim=0))
-        outputs = torch.stack(outputs)
+    def hashtag_modeling(self, hashtag_features, hashtag_lens, config='attn', user_embeds=None):
+        if config == 'attn':
+            masks = torch.where(hashtag_features[:, :, 0] != 0, torch.Tensor([0.]).cuda(), torch.Tensor([-np.inf]).cuda())
+            user_embeds = user_embeds.unsqueeze(1)
+            att_weights = (hashtag_features * user_embeds).sum(-1) + masks
+            att_weights = F.softmax(att_weights, 1)
+            outputs = torch.bmm(hashtag_features.transpose(1, 2), att_weights.unsqueeze(2)).squeeze(2)
+        elif config == 'mean':
+            outputs = []
+            for hashtag_feature, hashtag_len in zip(hashtag_features, hashtag_lens):
+                outputs.append(torch.mean(hashtag_feature[:hashtag_len.item()], dim=0))
+            outputs = torch.stack(outputs)
         return outputs
 
 
