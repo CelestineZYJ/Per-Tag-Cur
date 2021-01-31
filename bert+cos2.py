@@ -14,6 +14,7 @@ dataPath = 't'
 encoderPath = 'Bert'
 secondLayer = 'Cos'
 classifierPath = ''
+indexPath = ''
 
 
 class ScratchDataset(torch.utils.data.Dataset):
@@ -43,6 +44,7 @@ class ScratchDataset(torch.utils.data.Dataset):
         self.neg_sampling = neg_sampling
         self.dict = dict
         self.user_list = user_list
+        self.hashtag_split = {}
 
         self.train_hashtag_list = set()
         self.train_hashtag_per_user = {}
@@ -70,70 +72,74 @@ class ScratchDataset(torch.utils.data.Dataset):
         user_feature, hashtag_feature = [], []
         # user modeling(always train embedding)
         for text in self.train_text_per_user[user]:
-            user_feature.append(self.dict[text])
+            user_feature.append(self.get_feature(self.dict, text))
         # hashtag modeling(train embedding+test others' embedding)
+
+        for sub_hashtag in self.hashtag_split[hashtag]:
+            if sub_hashtag in self.train_text_per_hashtag:
+                for text in self.train_text_per_hashtag[sub_hashtag]:
+                    hashtag_feature.append(self.get_feature(self.dict, text))
+
         if self.data_split == 'Train':
-            for text in self.train_text_per_hashtag[hashtag]:
-                hashtag_feature.append(self.dict[text])
-            user_feature = torch.FloatTensor(user_feature)
-            hashtag_feature = torch.FloatTensor(hashtag_feature)
+            if len(hashtag_feature) == 0:
+                hashtag_feature.append([0.] * 768)
+
         if self.data_split == 'Valid':
-            try:
-                for text in self.train_text_per_hashtag[hashtag]:
-                    hashtag_feature.append(self.dict[text])
-            except:
-                pass
+            texts = []
+            for sub_hashtag in self.hashtag_split[hashtag]:
+                texts += self.valid_text_per_hashtag[sub_hashtag]
+            for text in list(set(texts) - set(self.valid_text_per_user[user])):
+                hashtag_feature.append(self.get_feature(self.dict, text))
+            if len(hashtag_feature) == 0:
+                hashtag_feature.append([-1.0] * 768)
 
-            for text in list(set(self.valid_text_per_hashtag[hashtag]) - set(self.valid_text_per_user[user])):
-                hashtag_feature.append(self.dict[text])
-
-            user_feature = torch.FloatTensor(user_feature)
-            hashtag_feature = torch.FloatTensor(hashtag_feature)
         if self.data_split == 'Test':
-            try:
-                for text in self.train_text_per_hashtag[hashtag]:
-                    hashtag_feature.append(self.dict[text])
-            except:
-                pass
-            for text in list(set(self.test_text_per_hashtag[hashtag]) - set(self.test_text_per_user[user])):
+            texts = []
+            for sub_hashtag in self.hashtag_split[hashtag]:
+                texts += self.test_text_per_hashtag[sub_hashtag]
+            for text in list(set(texts) - set(self.test_text_per_user[user])):
                 hashtag_feature.append(self.dict[text])
-            user_feature = torch.FloatTensor(user_feature)
-            hashtag_feature = torch.FloatTensor(hashtag_feature)
+            if len(hashtag_feature) == 0:
+                hashtag_feature.append([-1.0] * 768)
+
+        user_feature = torch.FloatTensor(user_feature)
+        hashtag_feature = torch.FloatTensor(hashtag_feature)
+
         return user_feature, hashtag_feature, torch.FloatTensor([self.label[idx]])
+
+    def get_feature(self, dict, key):
+        return dict[key]
 
     def __len__(self):
         return len(self.label)
 
     # cal user modeling and hashtag modeling
     def process_data_file(self):
-        if self.data_split == 'Train':
-            trainF = open(self.train_file, encoding='utf-8')
-            for line in trainF:
-                l = line.strip('\n').split('\t')
-                text, user, hashtags = l[0], l[1], l[2:]
-                self.train_text_per_user.setdefault(user, [])
-                self.train_text_per_user[user].append(text)
-                self.train_hashtag_per_user.setdefault(user, set())
-                for hashtag in hashtags:
-                    self.train_hashtag_list.add(hashtag)
-                    self.train_text_per_hashtag.setdefault(hashtag, [])
-                    self.train_text_per_hashtag[hashtag].append(text)
-                    self.train_hashtag_per_user[user].add(hashtag)
-            f.close()
+        with open('./' + dataPath + 'Data/hashtag_fake_split_twitter_update.csv', encoding='utf-8') as f:
+            for line in f:
+                l = line.strip('\n').strip('\t').split('\t')
+                self.hashtag_split[l[0]] = l[1:]
+        f.close()
+
+        trainF = open(self.train_file, encoding='utf-8')
+        for line in trainF:
+            l = line.strip('\n').split('\t')
+            text, user, hashtags = l[0], l[1], l[2:]
+            self.train_text_per_user.setdefault(user, [])
+            self.train_text_per_user[user].append(text)
+            self.train_hashtag_per_user.setdefault(user, set())
+            for hashtag in hashtags:
+                if len(hashtag) == 0:
+                    continue
+                self.train_hashtag_list.add(hashtag)
+                self.train_hashtag_per_user[user].add(hashtag)
+                for sub_hashtag in self.hashtag_split[hashtag]:
+                    self.train_text_per_hashtag.setdefault(sub_hashtag, [])
+                    self.train_text_per_hashtag[sub_hashtag].append(text)
+        trainF.close()
+
         if self.data_split == 'Valid':
-            trainF = open(self.train_file, encoding='utf-8')
             validF = open(self.valid_file, encoding='utf-8')
-            for line in trainF:
-                l = line.strip('\n').split('\t')
-                text, user, hashtags = l[0], l[1], l[2:]
-                self.train_text_per_user.setdefault(user, [])
-                self.train_text_per_user[user].append(text)
-                self.train_hashtag_per_user.setdefault(user, set())
-                for hashtag in hashtags:
-                    self.train_hashtag_list.add(hashtag)
-                    self.train_text_per_hashtag.setdefault(hashtag, [])
-                    self.train_text_per_hashtag[hashtag].append(text)
-                    self.train_hashtag_per_user[user].add(hashtag)
             for line in validF:
                 l = line.strip('\n').split('\t')
                 text, user, hashtags = l[0], l[1], l[2:]
@@ -141,27 +147,17 @@ class ScratchDataset(torch.utils.data.Dataset):
                 self.valid_text_per_user[user].append(text)
                 self.valid_hashtag_per_user.setdefault(user, set())
                 for hashtag in hashtags:
+                    if len(hashtag) == 0:
+                        continue
                     self.valid_hashtag_list.add(hashtag)
-                    self.valid_text_per_hashtag.setdefault(hashtag, [])
-                    self.valid_text_per_hashtag[hashtag].append(text)
                     self.valid_hashtag_per_user[user].add(hashtag)
-
-            trainF.close()
+                    for sub_hashtag in self.hashtag_split[hashtag]:
+                        self.valid_text_per_hashtag.setdefault(sub_hashtag, [])
+                        self.valid_text_per_hashtag[sub_hashtag].append(text)
             validF.close()
+
         if self.data_split == 'Test':
-            trainF = open(self.train_file, encoding='utf-8')
             testF = open(self.test_file, encoding='utf-8')
-            for line in trainF:
-                l = line.strip('\n').split('\t')
-                text, user, hashtags = l[0], l[1], l[2:]
-                self.train_text_per_user.setdefault(user, [])
-                self.train_text_per_user[user].append(text)
-                self.train_hashtag_per_user.setdefault(user, set())
-                for hashtag in hashtags:
-                    self.train_hashtag_list.add(hashtag)
-                    self.train_text_per_hashtag.setdefault(hashtag, [])
-                    self.train_text_per_hashtag[hashtag].append(text)
-                    self.train_hashtag_per_user[user].add(hashtag)
             for line in testF:
                 l = line.strip('\n').split('\t')
                 text, user, hashtags = l[0], l[1], l[2:]
@@ -169,11 +165,13 @@ class ScratchDataset(torch.utils.data.Dataset):
                 self.test_text_per_user[user].append(text)
                 self.test_hashtag_per_user.setdefault(user, set())
                 for hashtag in hashtags:
+                    if len(hashtag) == 0:
+                        continue
                     self.test_hashtag_list.add(hashtag)
-                    self.test_text_per_hashtag.setdefault(hashtag, [])
-                    self.test_text_per_hashtag[hashtag].append(text)
                     self.test_hashtag_per_user[user].add(hashtag)
-            trainF.close()
+                    for sub_hashtag in self.hashtag_split[hashtag]:
+                        self.test_text_per_hashtag.setdefault(sub_hashtag, [])
+                        self.test_text_per_hashtag[sub_hashtag].append(text)
             testF.close()
 
     def create_dataset(self):
@@ -197,14 +195,18 @@ class ScratchDataset(torch.utils.data.Dataset):
                 pos_hashtag = list(set(self.valid_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
                 neg_hashtag = list(set(self.valid_hashtag_list) - set(self.valid_hashtag_per_user[user]) - set(
                     self.train_hashtag_per_user[user]))
+                num = len(neg_hashtag)
                 for hashtag in pos_hashtag:
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
-                for hashtag2 in neg_hashtag:
-                    self.user_hashtag.append((user, hashtag2))
-                    self.label.append(0)
+                    for i in range(30):
+                        j = np.random.randint(num)
+                        self.user_hashtag.append((user, neg_hashtag[j]))
+                        self.label.append(0)
         if self.data_split == 'Test':
-            labelF = open('./'+dataPath+encoderPath+secondLayer+classifierPath+'/test'+encoderPath+secondLayer+classifierPath+'.dat', "a")
+            labelF = open(
+                './' + dataPath + encoderPath + secondLayer + classifierPath + indexPath + '/test' + encoderPath + secondLayer + classifierPath + '.dat',
+                "a", encoding='utf-8')
             for index, user in enumerate(self.user_list):
                 labelF.write(f"# query {index}\n")
                 pos_hashtag = list(set(self.test_hashtag_per_user[user]) - set(self.train_hashtag_per_user[user]))
@@ -214,10 +216,18 @@ class ScratchDataset(torch.utils.data.Dataset):
                     self.user_hashtag.append((user, hashtag))
                     self.label.append(1)
                     labelF.write(f"{1} qid:{index}\n")
-                for hashtag2 in neg_hashtag:
-                    self.user_hashtag.append((user, hashtag2))
+
+                num = len(neg_hashtag)
+                for i in range(len(pos_hashtag) * 100):
+                    j = np.random.randint(num)
+                    self.user_hashtag.append((user, neg_hashtag[j]))
                     self.label.append(0)
                     labelF.write(f"{0} qid:{index}\n")
+
+                # for hashtag2 in neg_hashtag:
+                #     self.user_hashtag.append((user, hashtag2))
+                #     self.label.append(0)
+                #     labelF.write(f"{0} qid:{index}\n")
             labelF.close()
 
     def load_tensor_dict(self):
