@@ -22,11 +22,13 @@ secondLayer = 'LstmAttNcf'
 classifierPath = 'Mlp'
 indexPath = ''
 
-config = {'user_modeling': 'mean',
-                'hashtag_modeling': 'mean',
+config = {'user_modeling': 'None',
+                'hashtag_modeling': 'None',
                 'interaction_modeling': 'ncf',
                 'num_users': 597,
                 'num_items': 23733,
+                'user_model_dim': 768,
+                'hashtag_model_dim': 768,
                 'latent_dim_mf': 8,
                 'latent_dim_mlp': 8,
                 'num_negative': 4,
@@ -35,12 +37,18 @@ config = {'user_modeling': 'mean',
 
 
 class Mlp(torch.nn.Module):
-    def __init__(self, config, input_size, hidden_size):
+    def __init__(self, config, hidden_size):
         super(Mlp, self).__init__()
-        self.input_size = input_size
+        self.input_size = 0
+        if config['user_modeling'] == 'Lstm':
+            self.input_size += config['user_model_dim']
+        if config['hashtag_modeling'] == 'Att':
+            self.input_size += config['hashtag_model_dim']
+        if config['interaction_modeling'] == 'ncf':
+            self.input_size += config['latent_dim_mlp'] + config['latent_dim_mf']
         self.hidden_size = hidden_size
         self.relu = torch.nn.ReLU()
-        self.fc1 = torch.nn.Linear(self.input_size * 2, self.hidden_size)
+        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
         self.bn1 = torch.nn.BatchNorm1d(num_features=self.hidden_size)
         # self.fc2 = torch.nn.Linear(self.input_size, self.hidden_size)
         # self.bn2 = torch.nn.BatchNorm1d(num_features=self.hidden_size)
@@ -51,19 +59,32 @@ class Mlp(torch.nn.Module):
         self.interaction = Neumf(config)
 
     def forward(self, sign, user_features, user_lens, hashtag_features, hashtag_lens, users, items):
-        user_embeds = self.user_modeling(user_features, user_lens)
-        hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens, user_embeds=user_embeds)
-        ncf_embeds = self.interaction_modeling(users, items)
-        if config['user_modeling'] == 'None' and config['hashtag_modeling'] == 'None':
+        if config['user_modeling'] == 'None' and config['hashtag_modeling'] == 'None' and config['interaction_modeling'] == 'ncf':
+            ncf_embeds = self.interaction_modeling(users, items)
             x = ncf_embeds
-        else:
+        elif config['user_modeling'] != 'None' and config['hashtag_modeling'] != 'None' and config['interaction_modeling'] == 'ncf':
+            user_embeds = self.user_modeling(user_features, user_lens)
+            hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens, user_embeds=user_embeds)
+            ncf_embeds = self.interaction_modeling(users, items)
             x = torch.cat((user_embeds, hashtag_embeds, ncf_embeds), dim=1)
+            # print(x.size())  # torch.Size([128, 1552])
+        elif config['user_modeling'] != 'None' and config['hashtag_modeling'] != 'None' and config['interaction_modeling'] == 'None':
+            user_embeds = self.user_modeling(user_features, user_lens)
+            hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens, user_embeds=user_embeds)
+            x = torch.cat((user_embeds, hashtag_embeds), dim=1)
 
+        print('********************************************************************************************************')
         x = self.relu(self.bn1(self.fc1(x)))
+        # print(x)
+        # print(x.size())
         # x = self.relu(self.bn2(self.fc2(x)))
         output = self.fc3(x)
+        print(output)
+        print(output.size())
 
         output = self.sigmoid(output)
+        print(output)
+        print(output.size())
         return output
 
     def user_modeling(self, user_features, user_lens):
@@ -78,14 +99,14 @@ class Mlp(torch.nn.Module):
             outputs = torch.stack(outputs)
             return outputs
 
-    def hashtag_modeling(self, hashtag_features, hashtag_lens, config='mean', user_embeds=None):
-        if config == 'attn':
+    def hashtag_modeling(self, hashtag_features, hashtag_lens, user_embeds=None):
+        if config['hashtag_modeling'] == 'attn':
             masks = torch.where(hashtag_features[:, :, 0] != 0, torch.Tensor([0.]).cuda(), torch.Tensor([-np.inf]).cuda())
             user_embeds = user_embeds.unsqueeze(1)
             att_weights = (hashtag_features * user_embeds).sum(-1) + masks
             att_weights = F.softmax(att_weights, 1)
             outputs = torch.bmm(hashtag_features.transpose(1, 2), att_weights.unsqueeze(2)).squeeze(2)
-        elif config == 'mean':
+        elif config['hashtag_modeling'] == 'mean':
             outputs = []
             for hashtag_feature, hashtag_len in zip(hashtag_features, hashtag_lens):
                 outputs.append(torch.mean(hashtag_feature[:hashtag_len.item()], dim=0))
@@ -95,7 +116,8 @@ class Mlp(torch.nn.Module):
 
     def interaction_modeling(self, users, items):
         outputs = self.interaction(users, items)
-        print(outputs.size())
+        # print(outputs)
+        # print(outputs.size())  # torch.Size([128=batch_size, 16])
         return outputs
 
 
@@ -349,7 +371,7 @@ def cal_all_pair():
     train_dataloader = data.DataLoader(train_dataset, batch_size=128, shuffle=True, collate_fn=my_collate, num_workers=1)
     valid_dataloader = data.DataLoader(valid_dataset, batch_size=512, collate_fn=my_collate, num_workers=1)
     # model, criterion, optimizer
-    model = Mlp(config, 768, 256)
+    model = Mlp(config, 256)
     # criterion = torch.nn.BCELoss()
     weights = torch.Tensor([1, 150])
     # optimizer = torch.optim.SGD(model.parameters(), lr=0.01)  # , momentum=0.9)
@@ -361,7 +383,7 @@ def cal_all_pair():
         weights = weights.cuda()
 
     # train the model
-    epoch = 25
+    epoch = 1
     best_valid_loss = 1e10
     best_epoch = -1
 
@@ -418,14 +440,16 @@ def cal_all_pair():
         #     best_model = best_model.cuda()
         model.eval()
         with torch.no_grad():
-            for user_features, user_lens, hashtag_features, hashtag_lens, labels in tqdm(valid_dataloader):
+            for user_features, user_lens, hashtag_features, hashtag_lens, labels, users, items in tqdm(valid_dataloader):
                 if torch.cuda.is_available():
                     user_features = user_features.cuda()
                     user_lens = user_lens.cuda()
                     hashtag_features = hashtag_features.cuda()
                     hashtag_lens = hashtag_lens.cuda()
                     labels = labels.cuda()
-                pred_labels = model('Train', user_features, user_lens, hashtag_features, hashtag_lens)
+                    users = users.cuda()
+                    items = items.cuda()
+                pred_labels = model('Train', user_features, user_lens, hashtag_features, hashtag_lens, users, items)
                 loss = weighted_class_bceloss(pred_labels, labels.reshape(-1, 1), weights)
                 total_loss += (loss.item() * len(labels))
                 for pred_label, label in zip(pred_labels, labels.reshape(-1, 1)):
@@ -451,7 +475,7 @@ def cal_all_pair():
         torch.save(model.state_dict(), './'+dataPath+encoderPath+secondLayer+classifierPath+indexPath+f'/model_{epoch}.pt')
 
     # test
-    best_model = Mlp(config, 768, 256)
+    best_model = Mlp(config, 256)
     best_model.load_state_dict(torch.load('./'+dataPath+encoderPath+secondLayer+classifierPath+indexPath+f'/model_{best_epoch}.pt'))
     # best_model.load_state_dict(torch.load(f'/home/yjzhang/exp/{exp_name}/best_model.pt'))
     if torch.cuda.is_available():
@@ -467,10 +491,14 @@ def cal_all_pair():
     with torch.no_grad():
         for i in tqdm(range(len(test_dataset))):
             line = lines[i]
-            test_user_feature, test_hashtag_feature, test_label = test_dataset[i]
+            test_user_feature, test_hashtag_feature, test_label, test_user, test_hashtag = test_dataset[i]
+            test_user = torch.LongTensor(test_user)
+            test_hashtag = torch.LongTensor(test_hashtag)
             test_user_feature = test_user_feature.cuda()
             test_hashtag_feature = test_hashtag_feature.cuda()
             test_label = test_label.cuda()
+            test_user = test_user.cuda()
+            test_hashtag = test_hashtag.cuda()
 
             user = line[6:]
             if (user == last_user):
@@ -480,7 +508,7 @@ def cal_all_pair():
                 last_user = user
 
             try:
-                pred_label = best_model('Test', test_user_feature.unsqueeze(0), torch.tensor([len(test_user_feature)]), test_hashtag_feature.unsqueeze(0), torch.tensor([len(test_hashtag_feature)]))
+                pred_label = best_model('Test', test_user_feature.unsqueeze(0), torch.tensor([len(test_user_feature)]), test_hashtag_feature.unsqueeze(0), torch.tensor([len(test_hashtag_feature)]), test_user, test_hashtag)
                 print(line, file=fw)
             except:
                 print("no test")
@@ -488,9 +516,11 @@ def cal_all_pair():
 
             print(pred_label)
             print(test_label)
-
-            pred_label = pred_label.cpu().detach().numpy().tolist()[0]
-            preF.write(f"{pred_label}\n")
+            try:
+                pred_label = pred_label.cpu().detach().numpy().tolist()[0]
+                preF.write(f"{pred_label}\n")
+            except:
+                pass
         # after_train = criterion(pred_label, test_label)
         # print("test loss after train", after_train.item())
 
