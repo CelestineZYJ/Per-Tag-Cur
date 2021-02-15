@@ -22,6 +22,13 @@ secondLayer = 'LstmAttNcf'
 classifierPath = 'Mlp'
 indexPath = ''
 
+
+hashtag_to_id = {}
+hashtag_id = 0
+user_to_id = {}
+user_id = 0
+
+
 config = {'user_modeling': 'None',
                 'hashtag_modeling': 'None',
                 'interaction_modeling': 'ncf',
@@ -73,18 +80,15 @@ class Mlp(torch.nn.Module):
             hashtag_embeds = self.hashtag_modeling(hashtag_features, hashtag_lens, user_embeds=user_embeds)
             x = torch.cat((user_embeds, hashtag_embeds), dim=1)
 
-        print('********************************************************************************************************')
         x = self.relu(self.bn1(self.fc1(x)))
         # print(x)
         # print(x.size())
         # x = self.relu(self.bn2(self.fc2(x)))
         output = self.fc3(x)
-        print(output)
-        print(output.size())
-
+        # print(output)
+        # print(output.size())
         output = self.sigmoid(output)
-        print(output)
-        print(output.size())
+        # print(output.size())
         return output
 
     def user_modeling(self, user_features, user_lens):
@@ -165,10 +169,6 @@ class ScratchDataset(torch.utils.data.Dataset):
         self.test_text_per_user = {}
         self.test_text_per_hashtag = {}
 
-        self.hashtag_to_id = {}
-        self.hashtag_id = 0
-        self.user_to_id = {}
-        self.user_id = 0
         self.user_hashtag = []
         self.label = []
 
@@ -176,18 +176,23 @@ class ScratchDataset(torch.utils.data.Dataset):
         self.create_dataset()
 
     def __getitem__(self, idx):
+        global hashtag_to_id
+        global user_to_id
+        global hashtag_id
+        global user_id
         user, hashtag = self.user_hashtag[idx]
-        if hashtag in self.hashtag_to_id:
-            pass
-        else:
-            self.hashtag_to_id[hashtag] = self.hashtag_id
-            self.hashtag_id += 1
 
-        if user in self.user_to_id:
+        if user in user_to_id:
             pass
         else:
-            self.user_to_id[user] = self.user_id
-            self.user_id += 1
+            user_to_id[user] = user_id
+            user_id = user_id + 1
+
+        if hashtag in hashtag_to_id:
+            pass
+        else:
+            hashtag_to_id[hashtag] = hashtag_id
+            hashtag_id = hashtag_id + 1
 
         user_feature, hashtag_feature = [], []
         # user modeling(always train embedding)
@@ -225,7 +230,7 @@ class ScratchDataset(torch.utils.data.Dataset):
         user_feature = torch.FloatTensor(user_feature)
         hashtag_feature = torch.FloatTensor(hashtag_feature)
 
-        return user_feature, hashtag_feature, torch.FloatTensor([self.label[idx]]), self.user_to_id[user], self.hashtag_to_id[hashtag]
+        return user_feature, hashtag_feature, torch.FloatTensor([self.label[idx]]), user_to_id[user], hashtag_to_id[hashtag]
 
     def get_feature(self, dict, key):
         return dict[key]
@@ -383,7 +388,7 @@ def cal_all_pair():
         weights = weights.cuda()
 
     # train the model
-    epoch = 1
+    epoch = 25
     best_valid_loss = 1e10
     best_epoch = -1
 
@@ -492,8 +497,9 @@ def cal_all_pair():
         for i in tqdm(range(len(test_dataset))):
             line = lines[i]
             test_user_feature, test_hashtag_feature, test_label, test_user, test_hashtag = test_dataset[i]
-            test_user = torch.LongTensor(test_user)
-            test_hashtag = torch.LongTensor(test_hashtag)
+            test_user = torch.LongTensor([test_user])
+            test_hashtag = torch.LongTensor([test_hashtag])
+
             test_user_feature = test_user_feature.cuda()
             test_hashtag_feature = test_hashtag_feature.cuda()
             test_label = test_label.cuda()
@@ -516,11 +522,8 @@ def cal_all_pair():
 
             print(pred_label)
             print(test_label)
-            try:
-                pred_label = pred_label.cpu().detach().numpy().tolist()[0]
-                preF.write(f"{pred_label}\n")
-            except:
-                pass
+            pred_label = pred_label.cpu().detach().numpy().tolist()[0]
+            preF.write(f"{pred_label}\n")
         # after_train = criterion(pred_label, test_label)
         # print("test loss after train", after_train.item())
 
