@@ -73,7 +73,7 @@ class ScratchDataset(torch.utils.data.Dataset):
             num = len(neg_hashtag)
             for hashtag in pos_hashtag:
                 self.user_hashtag.append((user, hashtag))
-                self.label.append(1)
+                self.label.append(150)
                 for i in range(self.neg_sampling):
                     j = np.random.randint(num)
                     self.user_hashtag.append((user, neg_hashtag[j]))
@@ -86,13 +86,18 @@ class ScratchDataset(torch.utils.data.Dataset):
 def my_collate(batch):
     user_features, hashtag_features, labels = [], [], []
     user_len, hashtag_len = [], []
+    users, items = [], []
     batch_size = len(batch)
-    for user_feature, hashtag_feature, label in batch:
+    for user_feature, hashtag_feature, label, user, hashtag in batch:
+        # text features
         user_features.append(user_feature)
         hashtag_features.append(hashtag_feature)
         labels.append(label)
         user_len.append(user_feature.shape[0])
         hashtag_len.append(hashtag_feature.shape[0])
+        # ncf features
+        users.append(int(user))
+        items.append(int(hashtag))
     max_user_len, max_hashtag_len = max(user_len), max(hashtag_len)
     for i in range(batch_size):
         user_feature, hashtag_feature = user_features[i], hashtag_features[i]
@@ -100,4 +105,5 @@ def my_collate(batch):
         hashtag_features[i] = torch.cat((hashtag_feature, torch.zeros(max_hashtag_len-len(hashtag_feature), 768)), dim=0)
     user_features, hashtag_features = torch.stack(user_features), torch.stack(hashtag_features)
     user_len, hashtag_len, labels = torch.tensor(user_len), torch.tensor(hashtag_len), torch.tensor(labels)
-    return user_features, user_len, hashtag_features, hashtag_len, labels
+    users, items = torch.LongTensor(users), torch.LongTensor(items)
+    return user_features, user_len, hashtag_features, hashtag_len, labels, users, items
