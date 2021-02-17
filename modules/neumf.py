@@ -19,13 +19,11 @@ class Neumf(torch.nn.Module):
         for idx, (in_size, out_size) in enumerate(zip(config['layers'][:-1], config['layers'][1:])):
             self.fc_layers.append(torch.nn.Linear(in_size, out_size))
 
-        # self.affine_output = torch.nn.Linear(in_features=config['layers'][-1] + config['latent_dim_mf'], out_features=1)
-        # self.logistic = torch.nn.Sigmoid()
+        self.affine_output = torch.nn.Linear(in_features=config['layers'][-1] + config['latent_dim_mf'], out_features=1)
+        self.logistic = torch.nn.Sigmoid()
 
     def forward(self, user_indices, item_indices):
         # print(user_indices.size())  # torch.Size([128=batch_size])
-        # print(user_indices)
-        # print(item_indices)
         user_embedding_mlp = self.embedding_user_mlp(user_indices)
         # print(user_embedding_mlp)
         # print(user_embedding_mlp.size()) # torch.Size([128=batch_size, 8])
@@ -55,7 +53,10 @@ class Neumf(torch.nn.Module):
         vector = torch.cat([mlp_vector, mf_vector], dim=-1)
         # print(vector)
         # print(vector.size())
-        # logits = self.affine_output(vector)
-        # rating = self.logistic(logits)
-        # return rating
-        return vector
+        logits = self.affine_output(vector)
+        rating = self.logistic(logits)
+        # print('*************************************************************************---')
+        # print(rating)
+        # print(rating.size())
+        return rating
+        # return vector
